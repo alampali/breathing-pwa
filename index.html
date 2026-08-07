@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Calm 4-7-8 Breathing Session</title>
+  /manifest.json
+ 
+<meta name="theme-color" content="#123f52">
+ 
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Breathing">
+ 
+/icon-192.png
 <style>
   :root{
     --bg1:#071521; --bg2:#123f52; --bg3:#0f6b68;
@@ -160,6 +169,15 @@ async function startSession(){if(running)return; running=true; paused=false; rem
 function completeSession(){if(!running&&remaining>0)return; const planned=parseInt(durationEl.value,10); const elapsed=Math.max(0,planned-remaining); if(elapsed>=30 && sessionStart){const end=new Date(); const logs=getLogs(); logs.push({start:sessionStart.toISOString(),end:end.toISOString(),minutes:Math.round(elapsed/60*100)/100,seconds:elapsed,activity:'Mindfulness',pattern:'4-7-8',source:'Calm 4-7-8 HTML'}); saveLogs(logs);} running=false; paused=false; stopAudio(); phase.textContent='Session Complete'; phaseSub.textContent='Nice work. Your session has been saved locally.'; stepTimer.textContent='Done'; icon.textContent='🙏'; circle.style.transform='scale(1)'; startBtn.disabled=false; pauseBtn.disabled=true; durationEl.disabled=false;}
 function reset(){running=false; paused=false; stopAudio(); remaining=parseInt(durationEl.value,10); timerEl.textContent=mmss(remaining); stepTimer.textContent='Ready'; cycleCount.textContent='0'; phase.textContent='Ready when you are'; phaseSub.textContent='Choose a duration, then start. Audio begins only after you press Start.'; icon.textContent='☁️'; circle.style.transform='scale(1)'; startBtn.disabled=false; pauseBtn.disabled=true; durationEl.disabled=false;}
 startBtn.onclick=startSession; pauseBtn.onclick=()=>{paused=!paused; pauseBtn.textContent=paused?'Resume':'Pause'; if(audioCtx){if(paused)audioCtx.suspend(); else audioCtx.resume();}}; resetBtn.onclick=reset; durationEl.onchange=reset; document.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');selectedSound=p.dataset.sound;if(running&&!paused)startAudio();}); document.getElementById('exportCsvBtn').onclick=exportCsv; document.getElementById('exportJsonBtn').onclick=exportJson; document.getElementById('clearLogBtn').onclick=()=>{saveLogs([])}; renderLogs();
+</script>
+  <script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('Service Worker Registered'))
+      .catch(err => console.error(err));
+  });
+}
 </script>
 </body>
 </html>
