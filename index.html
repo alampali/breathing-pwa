@@ -88,12 +88,14 @@
     <div class="panel main">
       <header>
         <h1 class="title">Calm 4-7-8 Breathing</h1>
-        <div class="subtitle">A clean, non-overlapping meditation-style guide with gentle generated nature audio.</div>
+        <div class="subtitle">A clean and meditation-style guide with gentle generated nature audio.</div>
       </header>
 
       <section class="status-row" aria-label="Session status">
         <div class="stat"><div class="label">Timer</div><div class="value" id="timer">05:00</div></div>
-        <div class="stat"><div class="label">Step</div><div class="value" id="stepTimer">Ready</div></div>
+        <div class="stat"><div class="label">Step</div><div class="value" id="stepTimer">
+          
+        </div></div>
         <div class="stat"><div class="label">Cycle</div><div class="value" id="cycleCount">0</div></div>
       </section>
 
@@ -104,8 +106,7 @@
         </div>
       </section>
 
-      <section class="instruction">
-        <div class="phase" id="phase">Ready when you are</div>
+      <section class="instruction">        
         <div class="phase-sub" id="phaseSub">Choose a duration, then start. Audio begins only after you press Start.</div>
       </section>
 
@@ -122,7 +123,7 @@
     <aside class="panel side">
       <div class="sound-card">
         <h2>Soundscape</h2>
-        <p class="note">No external music files are needed. This page generates soft ocean, rain, and singing-bowl style ambience in your browser.</p>
+        
         <div class="sound-row">
           <button class="pill active" data-sound="ocean">Ocean</button>
           <button class="pill" data-sound="rain">Rain</button>
@@ -133,7 +134,7 @@
 
       <div class="log-card">
         <h2>Session Log</h2>
-        <p class="note">Sessions are saved locally in this browser only. Export CSV when you want to archive or use it with an iPhone Shortcut/native app workflow.</p>
+        
         <div id="logArea"></div>
         <div class="controls" style="justify-content:flex-start;padding-top:10px">
           <button class="green" id="exportCsvBtn">Export CSV</button>
@@ -141,9 +142,7 @@
           <button class="secondary" id="clearLogBtn">Clear Log</button>
         </div>
         <p class="privacy">Apple Health direct write is not available from a normal HTML page. To add these as Mindfulness minutes, use the CSV with a Shortcuts/native HealthKit flow that asks your permission on iPhone.</p>
-      </div>
-
-      <p class="tiny">Tip: Save this file to iCloud Drive or OneDrive and open it from your phone when you want a lightweight breathing guide.</p>
+      </div>      
     </aside>
   </section>
 </main>
