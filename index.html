@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calm 4-7-8 Breathing Session</title>
+<style>
+  :root{
+    --bg1:#071521; --bg2:#123f52; --bg3:#0f6b68;
+    --glass:rgba(255,255,255,.13); --glass2:rgba(255,255,255,.08);
+    --text:#f7fbff; --muted:#cfe7ef; --accent:#9ee8ff; --accent2:#c7ffd8;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:"Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color:var(--text);}
+  body{
+    min-height:100vh;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2),var(--bg3));
+    overflow-x:hidden;
+  }
+  .ambient{position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:0;}
+  .orb{position:absolute; border-radius:50%; filter:blur(12px); opacity:.26; animation:float 24s infinite ease-in-out alternate;}
+  .orb.one{width:420px;height:420px;background:#8ee6ff;left:-150px;top:-80px;}
+  .orb.two{width:360px;height:360px;background:#b7ffd4;right:-120px;bottom:-90px;animation-delay:4s;}
+  .orb.three{width:240px;height:240px;background:#ffffff;left:55%;top:8%;opacity:.12;animation-delay:8s;}
+  @keyframes float{to{transform:translate(45px,35px) scale(1.12)}}
+
+  .page{position:relative; z-index:1; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px;}
+  .shell{width:min(1080px,100%); display:grid; grid-template-columns:1.08fr .92fr; gap:22px; align-items:stretch;}
+  .panel{background:var(--glass); border:1px solid rgba(255,255,255,.22); border-radius:30px; box-shadow:0 24px 70px rgba(0,0,0,.26); backdrop-filter:blur(18px);}
+  .main{padding:32px; display:grid; grid-template-rows:auto auto 1fr auto; gap:22px; min-height:680px;}
+  .side{padding:24px; display:flex; flex-direction:column; gap:16px; min-height:680px;}
+  .title{margin:0; font-size:clamp(2rem,4vw,3.5rem); line-height:1.05; letter-spacing:-.04em;}
+  .subtitle{margin-top:9px; color:var(--muted); font-size:1.08rem;}
+  .status-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .stat{background:var(--glass2); border:1px solid rgba(255,255,255,.14); border-radius:18px; padding:14px; min-height:82px; display:flex; flex-direction:column; justify-content:center;}
+  .label{font-size:.78rem; text-transform:uppercase; letter-spacing:.1em; color:#bfe9ef;}
+  .value{font-size:1.5rem; margin-top:5px; font-weight:600;}
+
+  .breathing-stage{display:grid; place-items:center; min-height:330px; padding:14px 0; position:relative;}
+  .ring-wrap{width:min(320px,72vw); height:min(320px,72vw); display:grid; place-items:center; position:relative;}
+  .ring-bg{position:absolute; inset:0; border-radius:50%; border:1px solid rgba(255,255,255,.28); box-shadow:inset 0 0 50px rgba(255,255,255,.12), 0 0 70px rgba(158,232,255,.18);}
+  .breath-circle{width:190px; height:190px; border-radius:50%; background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.78),rgba(158,232,255,.34) 38%,rgba(255,255,255,.1) 70%); display:grid; place-items:center; transition:transform 1s ease-in-out, box-shadow 1s ease-in-out; box-shadow:0 0 40px rgba(158,232,255,.28);}
+  .breath-icon{font-size:4.2rem; line-height:1; filter:drop-shadow(0 8px 16px rgba(0,0,0,.2));}
+  .instruction{text-align:center; min-height:102px; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:6px;}
+  .phase{font-size:clamp(2rem,5vw,3.3rem); font-weight:700; letter-spacing:-.03em;}
+  .phase-sub{color:var(--muted); min-height:24px;}
+
+  .controls{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; padding-top:4px;}
+  button,select{border:0; border-radius:999px; padding:13px 18px; font-size:1rem;}
+  select{background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.24); outline:none;}
+  select option{color:#10222e;}
+  button{background:var(--accent); color:#06283a; font-weight:750; cursor:pointer; box-shadow:0 10px 28px rgba(0,0,0,.18); transition:.2s transform,.2s opacity;}
+  button:hover{transform:translateY(-1px)}
+  button.secondary{background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.24);}
+  button.green{background:var(--accent2); color:#08351d;}
+  button:disabled{opacity:.55; cursor:not-allowed; transform:none;}
+
+  .side h2{margin:0; font-size:1.4rem;}
+  .note{color:var(--muted); line-height:1.45; margin:0;}
+  .sound-card,.log-card{background:rgba(0,0,0,.14); border:1px solid rgba(255,255,255,.14); border-radius:22px; padding:18px;}
+  .sound-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;}
+  .pill{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.11); color:#fff; border-radius:999px; padding:9px 12px; cursor:pointer;}
+  .pill.active{background:#d5f7ff; color:#09303f; font-weight:700;}
+  table{width:100%; border-collapse:collapse; font-size:.88rem; margin-top:10px;}
+  th,td{padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.12); text-align:left; vertical-align:top;}
+  th{color:#bfe9ef; font-weight:600;}
+  .empty{color:var(--muted); padding:12px 0;}
+  .privacy{font-size:.82rem; color:#cfe7ef; line-height:1.45;}
+  .tiny{font-size:.78rem; color:#b8dbe3;}
+  @media (max-width:900px){.shell{grid-template-columns:1fr}.main,.side{min-height:auto}.status-row{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.page{padding:14px}.main{padding:22px}.side{padding:20px}.breathing-stage{min-height:280px}}
+</style>
+</head>
+<body>
+<div class="ambient"><div class="orb one"></div><div class="orb two"></div><div class="orb three"></div></div>
+<main class="page">
+  <section class="shell">
+    <div class="panel main">
+      <header>
+        <h1 class="title">Calm 4-7-8 Breathing</h1>
+        <div class="subtitle">A clean, non-overlapping meditation-style guide with gentle generated nature audio.</div>
+      </header>
+
+      <section class="status-row" aria-label="Session status">
+        <div class="stat"><div class="label">Timer</div><div class="value" id="timer">05:00</div></div>
+        <div class="stat"><div class="label">Step</div><div class="value" id="stepTimer">Ready</div></div>
+        <div class="stat"><div class="label">Cycle</div><div class="value" id="cycleCount">0</div></div>
+      </section>
+
+      <section class="breathing-stage" aria-live="polite">
+        <div class="ring-wrap">
+          <div class="ring-bg"></div>
+          <div class="breath-circle" id="circle"><div class="breath-icon" id="icon">☁️</div></div>
+        </div>
+      </section>
+
+      <section class="instruction">
+        <div class="phase" id="phase">Ready when you are</div>
+        <div class="phase-sub" id="phaseSub">Choose a duration, then start. Audio begins only after you press Start.</div>
+      </section>
+
+      <section class="controls">
+        <select id="duration" aria-label="Session duration">
+          <option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option><option value="1200">20 minutes</option>
+        </select>
+        <button id="startBtn">Start Session</button>
+        <button class="secondary" id="pauseBtn" disabled>Pause</button>
+        <button class="secondary" id="resetBtn">Reset</button>
+      </section>
+    </div>
+
+    <aside class="panel side">
+      <div class="sound-card">
+        <h2>Soundscape</h2>
+        <p class="note">No external music files are needed. This page generates soft ocean, rain, and singing-bowl style ambience in your browser.</p>
+        <div class="sound-row">
+          <button class="pill active" data-sound="ocean">Ocean</button>
+          <button class="pill" data-sound="rain">Rain</button>
+          <button class="pill" data-sound="bowl">Singing Bowl</button>
+          <button class="pill" data-sound="none">Silent</button>
+        </div>
+      </div>
+
+      <div class="log-card">
+        <h2>Session Log</h2>
+        <p class="note">Sessions are saved locally in this browser only. Export CSV when you want to archive or use it with an iPhone Shortcut/native app workflow.</p>
+        <div id="logArea"></div>
+        <div class="controls" style="justify-content:flex-start;padding-top:10px">
+          <button class="green" id="exportCsvBtn">Export CSV</button>
+          <button class="secondary" id="exportJsonBtn">Export JSON</button>
+          <button class="secondary" id="clearLogBtn">Clear Log</button>
+        </div>
+        <p class="privacy">Apple Health direct write is not available from a normal HTML page. To add these as Mindfulness minutes, use the CSV with a Shortcuts/native HealthKit flow that asks your permission on iPhone.</p>
+      </div>
+
+      <p class="tiny">Tip: Save this file to iCloud Drive or OneDrive and open it from your phone when you want a lightweight breathing guide.</p>
+    </aside>
+  </section>
+</main>
+<script>
+const pattern=[{name:'Breathe In',sub:'Inhale gently through your nose',seconds:4,scale:1.42,icon:'🌊'}, {name:'Hold',sub:'Stay relaxed, no strain',seconds:7,scale:1.42,icon:'✨'}, {name:'Breathe Out',sub:'Exhale slowly and completely',seconds:8,scale:.78,icon:'🍃'}];
+const timerEl=document.getElementById('timer'),stepTimer=document.getElementById('stepTimer'),cycleCount=document.getElementById('cycleCount'),phase=document.getElementById('phase'),phaseSub=document.getElementById('phaseSub'),circle=document.getElementById('circle'),icon=document.getElementById('icon'),startBtn=document.getElementById('startBtn'),pauseBtn=document.getElementById('pauseBtn'),resetBtn=document.getElementById('resetBtn'),durationEl=document.getElementById('duration');
+let running=false, paused=false, audioCtx=null, audioNodes=[], sessionStart=null, selectedSound='ocean', remaining=300, cycle=0;
+function mmss(sec){const m=Math.floor(sec/60),s=sec%60;return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
+function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+function getLogs(){try{return JSON.parse(localStorage.getItem('breathingSessionLogs')||'[]')}catch{return []}}
+function saveLogs(logs){localStorage.setItem('breathingSessionLogs',JSON.stringify(logs));renderLogs()}
+function renderLogs(){const logs=getLogs(); const area=document.getElementById('logArea'); if(!logs.length){area.innerHTML='<div class="empty">No sessions logged yet.</div>'; return;} const rows=logs.slice(-5).reverse().map(l=>`<tr><td>${new Date(l.start).toLocaleString()}</td><td>${l.minutes}</td><td>${l.pattern}</td></tr>`).join(''); area.innerHTML=`<table><thead><tr><th>Start</th><th>Min</th><th>Pattern</th></tr></thead><tbody>${rows}</tbody></table>`}
+function download(name,text,type='text/plain'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},0)}
+function csvEscape(v){return `"${String(v).replaceAll('"','""')}"`}
+function exportCsv(){const logs=getLogs(); const header=['startDate','endDate','durationMinutes','activity','breathingPattern','sourceName']; const rows=logs.map(l=>[l.start,l.end,l.minutes,'Mindfulness',l.pattern,'Calm 4-7-8 HTML'].map(csvEscape).join(',')); download('breathing_mindfulness_sessions.csv',[header.join(','),...rows].join('\n'),'text/csv')}
+function exportJson(){download('breathing_mindfulness_sessions.json',JSON.stringify(getLogs(),null,2),'application/json')}
+function createNoiseBuffer(ctx){const buffer=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate); const data=buffer.getChannelData(0); for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1; return buffer;}
+function stopAudio(){audioNodes.forEach(n=>{try{n.stop&&n.stop()}catch{};try{n.disconnect&&n.disconnect()}catch{}}); audioNodes=[]; if(audioCtx){try{audioCtx.close()}catch{} audioCtx=null;}}
+function startAudio(){if(selectedSound==='none')return; stopAudio(); audioCtx=new(window.AudioContext||window.webkitAudioContext)(); const master=audioCtx.createGain(); master.gain.value=.045; master.connect(audioCtx.destination); audioNodes.push(master);
+  if(selectedSound==='ocean'||selectedSound==='rain'){const src=audioCtx.createBufferSource(); src.buffer=createNoiseBuffer(audioCtx); src.loop=true; const filter=audioCtx.createBiquadFilter(); filter.type=selectedSound==='ocean'?'lowpass':'bandpass'; filter.frequency.value=selectedSound==='ocean'?420:1600; const lfo=audioCtx.createOscillator(); const lfoGain=audioCtx.createGain(); lfo.frequency.value=.08; lfoGain.gain.value=selectedSound==='ocean'?260:80; lfo.connect(lfoGain); lfoGain.connect(filter.frequency); src.connect(filter); filter.connect(master); src.start(); lfo.start(); audioNodes.push(src,filter,lfo,lfoGain);}
+  if(selectedSound==='bowl'||selectedSound==='ocean'){[174,285].forEach((f,i)=>{const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.type='sine';o.frequency.value=f;g.gain.value=selectedSound==='bowl'?.035:.012;o.connect(g);g.connect(master);o.start();audioNodes.push(o,g);});}
+}
+async function runStep(step){phase.textContent=step.name; phaseSub.textContent=step.sub; icon.textContent=step.icon; circle.style.transform=`scale(${step.scale})`; for(let i=step.seconds;i>0;i--){if(!running)return; while(paused&&running){await sleep(250)} stepTimer.textContent=i+'s'; await sleep(1000); remaining--; timerEl.textContent=mmss(Math.max(remaining,0)); if(remaining<=0)return;}}
+async function startSession(){if(running)return; running=true; paused=false; remaining=parseInt(durationEl.value,10); sessionStart=new Date(); cycle=0; timerEl.textContent=mmss(remaining); cycleCount.textContent='0'; startBtn.disabled=true; pauseBtn.disabled=false; durationEl.disabled=true; pauseBtn.textContent='Pause'; startAudio(); while(running && remaining>0){for(const step of pattern){await runStep(step); if(!running||remaining<=0)break;} if(running&&remaining>0){cycle++; cycleCount.textContent=cycle;}} completeSession();}
+function completeSession(){if(!running&&remaining>0)return; const planned=parseInt(durationEl.value,10); const elapsed=Math.max(0,planned-remaining); if(elapsed>=30 && sessionStart){const end=new Date(); const logs=getLogs(); logs.push({start:sessionStart.toISOString(),end:end.toISOString(),minutes:Math.round(elapsed/60*100)/100,seconds:elapsed,activity:'Mindfulness',pattern:'4-7-8',source:'Calm 4-7-8 HTML'}); saveLogs(logs);} running=false; paused=false; stopAudio(); phase.textContent='Session Complete'; phaseSub.textContent='Nice work. Your session has been saved locally.'; stepTimer.textContent='Done'; icon.textContent='🙏'; circle.style.transform='scale(1)'; startBtn.disabled=false; pauseBtn.disabled=true; durationEl.disabled=false;}
+function reset(){running=false; paused=false; stopAudio(); remaining=parseInt(durationEl.value,10); timerEl.textContent=mmss(remaining); stepTimer.textContent='Ready'; cycleCount.textContent='0'; phase.textContent='Ready when you are'; phaseSub.textContent='Choose a duration, then start. Audio begins only after you press Start.'; icon.textContent='☁️'; circle.style.transform='scale(1)'; startBtn.disabled=false; pauseBtn.disabled=true; durationEl.disabled=false;}
+startBtn.onclick=startSession; pauseBtn.onclick=()=>{paused=!paused; pauseBtn.textContent=paused?'Resume':'Pause'; if(audioCtx){if(paused)audioCtx.suspend(); else audioCtx.resume();}}; resetBtn.onclick=reset; durationEl.onchange=reset; document.querySelectorAll('.pill').forEach(p=>p.onclick=()=>{document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));p.classList.add('active');selectedSound=p.dataset.sound;if(running&&!paused)startAudio();}); document.getElementById('exportCsvBtn').onclick=exportCsv; document.getElementById('exportJsonBtn').onclick=exportJson; document.getElementById('clearLogBtn').onclick=()=>{saveLogs([])}; renderLogs();
+</script>
+</body>
+</html>
