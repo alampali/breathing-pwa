@@ -122,13 +122,26 @@ A web page cannot write to HealthKit. There is no browser API for it, and Apple 
 not shipped one, so any PWA needs a bridge. Two work:
 
 **1. Apple Shortcuts (available now).** In the Shortcuts app, create a Shortcut named
-exactly `Log Mindful Session` with two actions:
+exactly `Log Mindful Session` with four actions:
 
-1. **Split Text** — Text: *Shortcut Input*, Separator: *Custom* → `|`
-2. **Log Health Sample** — Type: *Mindful Session*, Start: *Split Text → Item 1*,
-   End: *Split Text → Item 2*
+1. **Split Text** — Separator: *Custom* → `|`. Then tap the *Text* field and pick
+   **Shortcut Input** from the bar above the keyboard.
+2. **Get First Item from List** — from *Split Text*
+3. **Get Item from List** — set to *Item at Index*, index `2`, from *Split Text*
+4. **Log Health Sample** — Type: *Mindful Minutes*, Start Date: *First Item*,
+   End Date: *Item at Index*
 
 Then tap **Send** next to a session on the Health tab.
+
+The health sample type is called **Mindful Minutes** in the Shortcuts UI, not "Mindful
+Session" — that name belongs to the Shortcut itself, which is what the app calls by URL.
+
+> **The first action is where this goes wrong.** Setting the separator is not enough: the
+> *Text* field must have the **Shortcut Input** variable placed in it. Left empty it shows
+> a pale "Text" with no icon, Split Text receives nothing, both dates come out empty, and
+> every run fails with *"Please select an end date that is after the start date"* — an
+> error that points at the dates and says nothing about the real cause. Every blue token
+> in a finished Shortcut carries a small icon; plain pale text means an empty field.
 
 The payload is deliberately **one session per run**, sent as a single line of text:
 
