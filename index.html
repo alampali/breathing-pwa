@@ -215,22 +215,30 @@
             <button class="secondary small" id="copyNameBtn">Copy</button>
           </div>
 
-          <p class="note" style="margin-top:14px">Give it these two actions:</p>
+          <p class="note" style="margin-top:14px">Give it these four actions, in order:</p>
           <ol class="steps">
             <li>
-              <strong>Split Text</strong><br>
-              Text: <em>Shortcut Input</em> · Separator: <em>Custom</em> → type <code>|</code>
+              <strong>Split Text</strong> — Separator: <em>Custom</em> → type <code>|</code><br>
+              Then tap the <em>Text</em> field and pick <strong>Shortcut Input</strong> from the
+              bar just above the keyboard.
+            </li>
+            <li><strong>Get First Item from List</strong> — from <em>Split Text</em></li>
+            <li>
+              <strong>Get Item from List</strong> — switch it to <em>Item at Index</em>,
+              index <code>2</code>, from <em>Split Text</em>
             </li>
             <li>
-              <strong>Log Health Sample</strong><br>
-              Type: <em>Mindful Session</em> · Start: <em>Split Text → Item 1</em> ·
-              End: <em>Split Text → Item 2</em>
+              <strong>Log Health Sample</strong> — Type: <em>Mindful Minutes</em> ·
+              Start Date: <em>First Item</em> · End Date: <em>Item at Index</em>
             </li>
           </ol>
+
           <p class="tiny" style="margin-top:10px">
-            To get <em>Item 1</em>: tap the Start Date field, pick the <em>Split Text</em> variable,
-            then set its <em>Get</em> option to <em>Item from List</em> and the index to 1. Same for
-            Item 2 on End Date.
+            <strong>The step that catches people out is the first one.</strong> If the
+            <em>Text</em> field still shows a pale "Text" with no icon next to it, no input is
+            connected — Split Text receives nothing, both dates come out empty, and every run
+            fails with <em>"Please select an end date that is after the start date."</em>
+            Every blue token should carry a small icon; plain pale text means an empty field.
           </p>
           <p class="tiny" style="margin-top:10px">
             The first send will ask permission to write to Health — that prompt is iOS, not this app.
@@ -241,8 +249,9 @@
             <button class="secondary small" id="copySampleBtn">Copy a sample line</button>
           </div>
           <p class="tiny" style="margin-top:8px">
-            Paste it into the Shortcut's own test run. If a Mindful Session appears in Health for
-            that time, the Shortcut is correct and the buttons above will work.
+            Run the Shortcut on its own and paste that line in when it asks for input. If Mindful
+            Minutes appears in Health for that time, the Shortcut is correct and the buttons above
+            will work.
           </p>
         </details>
 
