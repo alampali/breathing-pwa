@@ -50,10 +50,10 @@ export function clearSessions() {
   write(SESSIONS_KEY, []);
 }
 
-export function markSynced(ids) {
+export function setSynced(ids, value = true) {
   const set = new Set(ids);
   const sessions = getSessions().map((session) =>
-    set.has(session.id) ? { ...session, syncedToHealth: true } : session
+    set.has(session.id) ? { ...session, syncedToHealth: value } : session
   );
   write(SESSIONS_KEY, sessions);
   return sessions;

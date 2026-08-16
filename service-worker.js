@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calm-breathing-v3';
+const CACHE_NAME = 'calm-breathing-v4';
 
 // How long to wait for the network before falling back to the cache. Long
 // enough to ride out a slow connection, short enough that a dead one does not
