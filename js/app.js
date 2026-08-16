@@ -19,8 +19,8 @@ const el = {
   startBtn: $('startBtn'), pauseBtn: $('pauseBtn'), resetBtn: $('resetBtn'),
   patternList: $('patternList'), patternNote: $('patternNote'), patternMath: $('patternMath'),
   customCard: $('customCard'),
-  soundRow: $('soundRow'), volume: $('volume'),
-  logArea: $('logArea'), pendingBadge: $('pendingBadge'),
+  soundRow: $('soundRow'), volume: $('volume'), voiceStatus: $('voiceStatus'),
+  logArea: $('logArea'), healthList: $('healthList'), healthIntro: $('healthIntro'),
   toast: $('toast'),
 };
 
@@ -47,6 +47,10 @@ function toast(message) {
   el.toast.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.toast.classList.remove('show'), 2800);
+}
+
+function setVoiceStatus(message) {
+  el.voiceStatus.textContent = message;
 }
 
 function setScale(fullness) {
@@ -148,6 +152,8 @@ function renderHistory() {
   $('statCount').textContent = String(stats.count);
   $('statMinutes').textContent = String(stats.totalMinutes);
 
+  renderHealthList(sessions);
+
   if (sessions.length === 0) {
     el.logArea.innerHTML = '<div class="empty">No sessions yet. Your first one will show up here.</div>';
   } else {
@@ -166,8 +172,71 @@ function renderHistory() {
       <tbody>${rows}</tbody></table>`;
   }
 
-  const pending = health.pendingSessions().length;
-  el.pendingBadge.textContent = pending === 1 ? '1 session waiting' : `${pending} sessions waiting`;
+}
+
+/* ------------------------------------------------------------- health tab */
+
+function renderHealthList(sessions = store.getSessions()) {
+  const pending = health.pendingSessions();
+
+  el.healthIntro.textContent = sessions.length === 0
+    ? 'Once you have practised, your sessions will appear here ready to send.'
+    : pending.length === 0
+      ? 'Everything is logged. New sessions will appear here as you practise.'
+      : 'Set the Shortcut up once, then it is one tap per session.';
+
+  if (pending.length === 0) {
+    el.healthList.innerHTML = sessions.length === 0
+      ? '<div class="empty">Nothing to send yet.</div>'
+      : '<div class="empty">Nothing waiting — all sessions are marked as logged.</div>';
+    return;
+  }
+
+  el.healthList.innerHTML = '';
+  pending.forEach((session) => {
+    const row = document.createElement('div');
+    row.className = 'health-row';
+
+    const when = new Date(session.start).toLocaleString([], {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+
+    const label = document.createElement('div');
+    label.className = 'health-when';
+    label.innerHTML = `<strong></strong><span></span>`;
+    label.querySelector('strong').textContent = when;
+    label.querySelector('span').textContent = `${session.minutes} min · ${session.patternName}`;
+
+    const button = document.createElement('button');
+    button.className = 'green small';
+    button.textContent = 'Send';
+    button.onclick = () => {
+      health.sendSession(session);
+      // iOS never reports back, so the row switches to a state the user can
+      // correct rather than a modal asking whether it worked.
+      health.markLogged(session.id);
+      renderHistory();
+      toast('Marked as logged — undo it below if Health did not get it.');
+    };
+
+    row.append(label, button);
+    el.healthList.appendChild(row);
+  });
+
+  const logged = sessions.filter((session) => session.syncedToHealth);
+  if (logged.length > 0) {
+    const undo = document.createElement('button');
+    undo.className = 'secondary small';
+    undo.style.marginTop = '10px';
+    undo.textContent = `Undo last (${logged.length} marked as logged)`;
+    undo.onclick = () => {
+      const last = logged.sort((a, b) => a.start.localeCompare(b.start)).at(-1);
+      health.markNotLogged(last.id);
+      renderHistory();
+      toast('Put back in the queue.');
+    };
+    el.healthList.appendChild(undo);
+  }
 }
 
 /* ---------------------------------------------------------------- engine */
@@ -297,6 +366,9 @@ function startSession() {
   }
   audio.start(prefs.soundscape);
   audio.setVolume(prefs.volume);
+  // Must happen inside this tap: iOS only unlocks speech from a user gesture,
+  // and every cue after this comes from a timer.
+  if (prefs.voice) audio.primeSpeech();
   requestWakeLock();
   engine.start({
     pattern,
@@ -370,6 +442,10 @@ el.volume.oninput = () => {
         if (event.target.checked && engine.state === 'running') requestWakeLock();
         else releaseWakeLock();
       }
+      if (key === 'voice' && event.target.checked) {
+        audio.primeSpeech();   // this change event is still a user gesture
+        setVoiceStatus('');
+      }
     };
   });
 
@@ -388,6 +464,22 @@ CUSTOM_FIELDS.forEach(([id, kind]) => {
     renderPatterns();
   };
 });
+
+$('testVoiceBtn').onclick = () => {
+  if (!audio.speechSupported()) {
+    setVoiceStatus('This browser has no speech engine, so spoken guidance will not work here.');
+    return;
+  }
+  setVoiceStatus('Speaking…');
+  audio.primeSpeech();
+  audio.speak('Breathe in');
+  // speak() reports back through the blocked handler if nothing comes out.
+  setTimeout(() => {
+    if (el.voiceStatus.textContent === 'Speaking…') {
+      setVoiceStatus('Voice is working. If a session is silent, check the side switch is not on mute.');
+    }
+  }, 1200);
+};
 
 // Tabs
 document.querySelectorAll('[role="tab"]').forEach((tab) => {
@@ -419,22 +511,28 @@ $('clearLogBtn').onclick = () => {
 };
 
 // Apple Health
-$('sendHealthBtn').onclick = () => {
-  const { sent, ids } = health.sendToShortcut();
-  if (sent === 0) return toast('Nothing new to send.');
-  // iOS never tells the page what happened, so ask once we are back.
-  setTimeout(() => {
-    if (confirm(`Did the Shortcut log ${sent} session${sent === 1 ? '' : 's'} to Health?`)) {
-      health.confirmSynced(ids);
-      renderHistory();
-      toast('Marked as logged to Health.');
-    }
-  }, 1500);
+$('copyNameBtn').onclick = async () => {
+  const ok = await health.copyToClipboard(health.SHORTCUT_NAME);
+  toast(ok ? 'Shortcut name copied.' : `Copy failed — the name is "${health.SHORTCUT_NAME}".`);
 };
 
-$('copyHealthBtn').onclick = async () => {
-  if (health.pendingSessions().length === 0) return toast('Nothing new to copy.');
-  toast(await health.copyPayload() ? 'Copied to clipboard.' : 'Clipboard blocked — use Export JSON instead.');
+$('copySampleBtn').onclick = async () => {
+  // A real-looking line for a five-minute session ending now, so the Shortcut
+  // can be tested without waiting to practise first.
+  const end = new Date();
+  const start = new Date(end.getTime() - 5 * 60000);
+  const sample = health.payloadFor({ start: start.toISOString(), seconds: 300 });
+  const ok = await health.copyToClipboard(sample);
+  toast(ok ? 'Sample line copied.' : 'Copy failed — clipboard is blocked here.');
+};
+
+$('markAllLoggedBtn').onclick = () => {
+  const pending = health.pendingSessions();
+  if (pending.length === 0) return toast('Nothing waiting.');
+  if (!confirm(`Mark ${pending.length} session${pending.length === 1 ? '' : 's'} as already logged to Health?`)) return;
+  pending.forEach((session) => health.markLogged(session.id));
+  renderHistory();
+  toast('All marked as logged.');
 };
 
 // Leaving the page mid-session would desync the visuals from the audio, and a
@@ -474,6 +572,11 @@ function hydrateControls() {
     $(id).value = String(customPattern.steps.find((step) => step.kind === kind)?.seconds ?? 0);
   });
 }
+
+audio.setSpeechBlockedHandler(() => {
+  setVoiceStatus('iOS blocked that cue. Tap "Test voice" once, then start the session — '
+    + 'speech has to be unlocked by a tap before timed cues are allowed.');
+});
 
 hydrateControls();
 renderPatterns();

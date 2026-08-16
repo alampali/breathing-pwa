@@ -152,6 +152,10 @@
             <span class="toggle-text"><strong>Keep screen awake</strong><span>Stops the display sleeping mid-session</span></span>
             <input type="checkbox" id="wakeToggle"><span class="switch"></span>
           </label>
+          <div class="row" style="margin-top:12px">
+            <button class="secondary small" id="testVoiceBtn">Test voice</button>
+          </div>
+          <p class="tiny" id="voiceStatus" style="margin-top:8px"></p>
         </div>
 
         <p class="tiny">
@@ -192,45 +196,66 @@
       <!-- Health -->
       <div class="tabpanel" id="panel-health" role="tabpanel" aria-labelledby="tab-health">
         <div class="card">
-          <h2>Apple Health</h2>
-          <p class="note">
-            A web page cannot write to Health directly — Apple provides no browser API for it.
-            The working route is an Apple Shortcut, which logs the session as Mindful Minutes
-            after asking your permission on the phone.
+          <h2>Send sessions to Health</h2>
+          <p class="note" id="healthIntro">
+            Set the Shortcut up once, then it is one tap per session.
           </p>
-          <p class="note" style="margin-top:10px">
-            <span class="badge" id="pendingBadge">0 sessions waiting</span>
-          </p>
-          <div class="row" style="margin-top:12px">
-            <button class="green small" id="sendHealthBtn">Send to Shortcut</button>
-            <button class="secondary small" id="copyHealthBtn">Copy data</button>
-          </div>
+          <div id="healthList" style="margin-top:12px"></div>
         </div>
 
-        <div class="card">
-          <h2>One-time setup</h2>
-          <p class="note">In the Shortcuts app on your iPhone, create a Shortcut named exactly <code>Log Mindful Minutes</code>:</p>
+        <details class="card" id="healthSetup">
+          <summary><span><strong>Set up the Shortcut</strong> — once, on your iPhone</span></summary>
+
+          <p class="note" style="margin-top:12px">
+            In the <strong>Shortcuts</strong> app, tap <strong>+</strong> to make a new Shortcut and
+            name it exactly:
+          </p>
+          <div class="row" style="margin-top:8px; align-items:center">
+            <code class="code-chip" id="shortcutName">Log Mindful Session</code>
+            <button class="secondary small" id="copyNameBtn">Copy</button>
+          </div>
+
+          <p class="note" style="margin-top:14px">Give it these two actions:</p>
           <ol class="steps">
-            <li>Turn on <em>Receive text input from Share Sheet and other apps</em>.</li>
-            <li><code>Get Dictionary from Input</code> — parses the list this app sends.</li>
-            <li><code>Repeat with Each Item</code> in that list.</li>
-            <li>Inside the repeat: <code>Get Dictionary Value</code> for <code>start</code>, then again for <code>end</code>.</li>
-            <li>Inside the repeat: <code>Log Health Sample</code> → type <em>Mindful Session</em>, with those start and end dates.</li>
+            <li>
+              <strong>Split Text</strong><br>
+              Text: <em>Shortcut Input</em> · Separator: <em>Custom</em> → type <code>|</code>
+            </li>
+            <li>
+              <strong>Log Health Sample</strong><br>
+              Type: <em>Mindful Session</em> · Start: <em>Split Text → Item 1</em> ·
+              End: <em>Split Text → Item 2</em>
+            </li>
           </ol>
           <p class="tiny" style="margin-top:10px">
-            Then come back here and tap <em>Send to Shortcut</em>. iOS gives no confirmation back to
-            the browser, so this app asks you afterwards whether it went through before marking
-            the sessions as logged.
+            To get <em>Item 1</em>: tap the Start Date field, pick the <em>Split Text</em> variable,
+            then set its <em>Get</em> option to <em>Item from List</em> and the index to 1. Same for
+            Item 2 on End Date.
           </p>
-        </div>
+          <p class="tiny" style="margin-top:10px">
+            The first send will ask permission to write to Health — that prompt is iOS, not this app.
+          </p>
+
+          <p class="note" style="margin-top:14px">Check it works before relying on it:</p>
+          <div class="row">
+            <button class="secondary small" id="copySampleBtn">Copy a sample line</button>
+          </div>
+          <p class="tiny" style="margin-top:8px">
+            Paste it into the Shortcut's own test run. If a Mindful Session appears in Health for
+            that time, the Shortcut is correct and the buttons above will work.
+          </p>
+        </details>
 
         <div class="card">
-          <h2>Later: a native wrapper</h2>
+          <h2>If Shortcuts is more trouble than it's worth</h2>
           <p class="note">
-            Every session carries a stable id and a <code>syncedToHealth</code> flag, so a small
-            native app around this page can read the same records and write only the new ones
-            straight to HealthKit — no Shortcut needed.
+            Export your history as CSV or JSON from the History tab and keep it. Nothing is lost —
+            sessions stay on this device either way, and a native wrapper can import them later and
+            write straight to HealthKit with no Shortcut involved.
           </p>
+          <div class="row" style="margin-top:12px">
+            <button class="secondary small" id="markAllLoggedBtn">Mark all as logged</button>
+          </div>
         </div>
       </div>
     </aside>

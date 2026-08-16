@@ -175,16 +175,96 @@ export function cue(kind) {
   osc.stop(now + 1.7);
 }
 
+/* ------------------------------------------------------------------ speech */
+//
+// Spoken cues are the fiddliest thing here, and iOS is the reason. Three
+// separate behaviours conspire to drop utterances:
+//
+//   1. Speech may only *begin* from inside a user gesture. Every phase cue is
+//      fired from a timer, so unless the engine has been unlocked by an earlier
+//      tap, iOS silently discards them — no error, no event.
+//   2. cancel() settles asynchronously. Calling speak() in the same tick, as
+//      the obvious implementation does, loses the new utterance.
+//   3. The queue parks itself after a cancel or a trip to the background, and
+//      stays parked until resume() is called.
+
+let speechPrimed = false;
+let chosenVoice = null;
+let onSpeechBlocked = null;
+
+const synth = () => window.speechSynthesis;
+
+export const speechSupported = () => 'speechSynthesis' in window;
+
+function pickVoice() {
+  if (!speechSupported()) return null;
+  const voices = synth().getVoices();
+  if (!voices.length) return null;               // not loaded yet
+  const lang = navigator.language || 'en-US';
+  const base = lang.slice(0, 2);
+  return voices.find((v) => v.lang === lang && v.localService)
+    || voices.find((v) => v.lang === lang)
+    || voices.find((v) => v.lang?.startsWith(base) && v.localService)
+    || voices.find((v) => v.lang?.startsWith(base))
+    || voices.find((v) => v.default)
+    || voices[0]
+    || null;
+}
+
+if (speechSupported()) {
+  chosenVoice = pickVoice();
+  // The voice list is usually empty on first read and fills in asynchronously.
+  synth().addEventListener?.('voiceschanged', () => { chosenVoice = pickVoice(); });
+}
+
+/** Called when a cue was requested but the engine never spoke it. */
+export function setSpeechBlockedHandler(handler) {
+  onSpeechBlocked = handler;
+}
+
+/**
+ * Unlocks the speech engine. Must be called from inside a user gesture — a tap
+ * on Start or on the voice toggle — or every later cue is dropped on iOS.
+ */
+export function primeSpeech() {
+  if (!speechSupported() || speechPrimed) return;
+  try {
+    const warmup = new SpeechSynthesisUtterance(' ');
+    warmup.volume = 0;
+    warmup.onstart = () => { speechPrimed = true; };
+    synth().speak(warmup);
+  } catch {
+    // Nothing to do — speak() will report it as blocked if it stays broken.
+  }
+}
+
 export function speak(text) {
-  if (!('speechSynthesis' in window)) return;
+  if (!speechSupported()) return;
+  const engine = synth();
+  if (engine.paused) engine.resume();
+
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.85;
+  if (chosenVoice) utterance.voice = chosenVoice;
+  utterance.lang = chosenVoice?.lang || navigator.language || 'en-US';
+  utterance.rate = 0.9;
   utterance.pitch = 0.95;
-  utterance.volume = Math.min(1, volume + 0.2);
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
+  // The slider governs ambience; guidance needs to stay audible above it,
+  // unless the slider is all the way down and silence is clearly the intent.
+  utterance.volume = volume <= 0.02 ? 0 : Math.max(0.6, volume);
+
+  let started = false;
+  utterance.onstart = () => { started = true; speechPrimed = true; };
+  utterance.onerror = () => { if (!started) onSpeechBlocked?.(); };
+  setTimeout(() => { if (!started) onSpeechBlocked?.(); }, 700);
+
+  if (engine.speaking || engine.pending) {
+    engine.cancel();
+    setTimeout(() => engine.speak(utterance), 90);
+  } else {
+    engine.speak(utterance);
+  }
 }
 
 export function cancelSpeech() {
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (speechSupported()) synth().cancel();
 }

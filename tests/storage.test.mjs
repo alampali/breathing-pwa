@@ -86,8 +86,15 @@ const iso = (daysAgo, hour = 9) => {
     patternId: '478', patternName: '4-7-8 Relaxing Breath', timing: '4-7-8', cycles: 15, completed: true,
   }));
   assert.equal(health.pendingSessions().length, 2);
-  const payload = health.healthPayload();
-  assert.deepEqual(Object.keys(payload[0]).sort(), ['end', 'id', 'minutes', 'start']);
+
+  // The Shortcut does a single Split Text on "|", so the payload must be one
+  // line with exactly two ISO timestamps and no stray separators.
+  const line = health.payloadFor(store.getSessions()[0]);
+  const parts = line.split('|');
+  assert.equal(parts.length, 2, `expected two fields, got ${parts.length} in "${line}"`);
+  assert.ok(!line.includes('\n'), 'must stay on one line');
+  parts.forEach((part) => assert.ok(!Number.isNaN(Date.parse(part)), `"${part}" must parse as a date`));
+  console.log('✓ Shortcut payload is one line of two parseable timestamps');
 
   // A paused session's wall-clock end runs long; Health must get the practised
   // span, or the pause is credited as mindfulness.
@@ -99,28 +106,39 @@ const iso = (daysAgo, hour = 9) => {
     seconds: 300, minutes: 5,
     patternId: '478', patternName: '4-7-8 Relaxing Breath', timing: '4-7-8', cycles: 15, completed: true,
   });
-  const paused = health.healthPayload()[0];
-  const span = (new Date(paused.end) - new Date(paused.start)) / 60000;
+  const paused = store.getSessions()[0];
+  const span = (new Date(health.sessionEnd(paused)) - new Date(paused.start)) / 60000;
   assert.equal(span, 5, `Health span must be the 5 practised minutes, got ${span}`);
-  assert.equal(store.getSessions()[0].end, new Date(new Date(start).getTime() + 20 * 60000).toISOString(),
+  assert.equal(paused.end, new Date(new Date(start).getTime() + 20 * 60000).toISOString(),
     'the stored record keeps its real wall-clock end');
   console.log('✓ a 15-minute pause is not credited as mindful minutes');
+
+  // The URL must survive encoding — ISO timestamps contain ':' and '+'.
+  const url = health.shortcutUrl(paused);
+  assert.ok(url.startsWith('shortcuts://run-shortcut?name=Log%20Mindful%20Session'), url);
+  const text = decodeURIComponent(new URL(url).searchParams.get('text'));
+  assert.equal(text, health.payloadFor(paused), 'payload round-trips through the URL intact');
+  console.log('✓ the shortcuts:// URL round-trips the payload intact');
 
   backing.clear();
   [0, 1].forEach((d) => store.addSession({
     start: iso(d), end: iso(d), seconds: 300, minutes: 5,
     patternId: '478', patternName: '4-7-8 Relaxing Breath', timing: '4-7-8', cycles: 15, completed: true,
   }));
-  const ids = health.healthPayload().map((p) => p.id);
-  health.confirmSynced([ids[0]]);
-  assert.equal(health.pendingSessions().length, 1, 'only the confirmed one is marked');
+  const first = health.pendingSessions()[0];
+  health.markLogged(first.id);
+  assert.equal(health.pendingSessions().length, 1, 'only the sent one is marked');
 
+  health.markNotLogged(first.id);
+  assert.equal(health.pendingSessions().length, 2, 'undo puts it back in the queue');
+
+  health.markLogged(first.id);
   store.addSession({
     start: iso(0, 18), end: iso(0, 18), seconds: 120, minutes: 2,
     patternId: 'box', patternName: 'Box Breathing', timing: '4-4-4-4', cycles: 7, completed: true,
   });
   assert.equal(health.pendingSessions().length, 2, 'new sessions queue up again');
-  console.log('✓ only confirmed sessions are marked as sent to Health');
+  console.log('✓ send, undo, and re-send keep the queue correct');
 }
 
 /* 6. Prefs and custom pattern round-trip ---------------------------------- */
