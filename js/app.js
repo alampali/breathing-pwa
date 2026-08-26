@@ -5,6 +5,9 @@ import {
 import * as store from './storage.js';
 import * as audio from './audio.js';
 import * as health from './health.js';
+import * as insights from './insights.js';
+import { paceChart, heatmapGrid } from './charts.js';
+import { celebrate } from './celebrate.js';
 import { createEngine } from './engine.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,7 +22,8 @@ const el = {
   startBtn: $('startBtn'), pauseBtn: $('pauseBtn'), resetBtn: $('resetBtn'),
   patternList: $('patternList'), patternNote: $('patternNote'), patternMath: $('patternMath'),
   customCard: $('customCard'),
-  soundRow: $('soundRow'), volume: $('volume'), voiceStatus: $('voiceStatus'),
+  soundRow: $('soundRow'), volume: $('volume'),
+  voiceStatus: $('voiceStatus'), soundStatus: $('soundStatus'),
   logArea: $('logArea'), healthList: $('healthList'), healthIntro: $('healthIntro'),
   toast: $('toast'),
 };
@@ -51,6 +55,10 @@ function toast(message) {
 
 function setVoiceStatus(message) {
   el.voiceStatus.textContent = message;
+}
+
+function setSoundStatus(message) {
+  el.soundStatus.textContent = message;
 }
 
 function setScale(fullness) {
@@ -134,8 +142,17 @@ function renderSoundscapes() {
     button.setAttribute('aria-pressed', String(sound.id === prefs.soundscape));
     button.onclick = () => {
       prefs = store.setPrefs({ soundscape: sound.id });
-      audio.setSoundscape(sound.id);
+      if (engine.state === 'running' || engine.state === 'paused') {
+        audio.setSoundscape(sound.id);
+      } else {
+        // Outside a session, audition it. This tap is also a user gesture, so it
+        // doubles as the unlock that lets audio play at all on iOS.
+        audio.preview(sound.id);
+      }
       renderSoundscapes();
+      setSoundStatus(sound.id === 'none'
+        ? 'Sessions will run in silence.'
+        : `Playing a few seconds of ${sound.label.toLowerCase()}…`);
     };
     el.soundRow.appendChild(button);
   });
@@ -151,6 +168,8 @@ function renderHistory() {
   $('statToday').textContent = `${stats.todayMinutes} min`;
   $('statCount').textContent = String(stats.count);
   $('statMinutes').textContent = String(stats.totalMinutes);
+
+  renderInsights(sessions);
 
   renderHealthList(sessions);
 
@@ -172,6 +191,45 @@ function renderHistory() {
       <tbody>${rows}</tbody></table>`;
   }
 
+}
+
+/* ---------------------------------------------------------------- insights */
+
+function renderInsights(sessions) {
+  const breaths = insights.lifetimeBreaths(sessions);
+  $('statBreaths').textContent = breaths.toLocaleString();
+  $('breathNote').textContent = breaths === 0
+    ? 'Your breaths will be counted here from your first session.'
+    : 'Every guided breath since you started.';
+
+  const series = insights.paceSeries(sessions);
+  const chart = $('paceChart');
+  chart.innerHTML = '';
+  const summary = $('paceSummary');
+
+  if (series.length < 2) {
+    chart.innerHTML = '<div class="empty">A few more days of practice and your pace will show up here.</div>';
+    summary.textContent = '';
+  } else {
+    chart.appendChild(paceChart(series));
+    const trend = insights.paceTrend(series);
+    const latest = insights.formatBpm(series.at(-1).bpm);
+    if (!trend) {
+      summary.textContent = `Most recent day: ${latest} breaths per minute.`;
+    } else if (Math.abs(trend.delta) < 0.05) {
+      summary.textContent = `Holding steady around ${insights.formatBpm(trend.to)} breaths per minute.`;
+    } else if (trend.slower) {
+      summary.textContent = `You have slowed from ${insights.formatBpm(trend.from)} to `
+        + `${insights.formatBpm(trend.to)} breaths per minute — about ${trend.percent.toFixed(0)}% slower.`;
+    } else {
+      summary.textContent = `Currently ${insights.formatBpm(trend.to)} breaths per minute, `
+        + `up from ${insights.formatBpm(trend.from)}. Longer patterns will bring it back down.`;
+    }
+  }
+
+  const grid = $('heatmap');
+  grid.innerHTML = '';
+  grid.appendChild(heatmapGrid(insights.heatmap(sessions)));
 }
 
 /* ------------------------------------------------------------- health tab */
@@ -276,9 +334,7 @@ const engine = createEngine({
 
     if (prefs.chime) audio.cue(step.kind);
     if (prefs.voice) audio.speak(step.label);
-    if (prefs.haptics && navigator.vibrate) {
-      navigator.vibrate(step.kind === 'inhale' ? [50, 40, 50] : 45);
-    }
+    if (prefs.haptics) audio.vibrate(step.kind === 'inhale' ? [50, 40, 50] : 45);
   },
 
   onComplete(result) {
@@ -307,7 +363,11 @@ const engine = createEngine({
     }
 
     if (result.completed) {
-      if (prefs.chime) audio.cue('done');
+      // A struck bowl rather than another phase chime — about six seconds of
+      // decay under the bloom. Still governed by the chime setting: turning
+      // cues off means not being rung at.
+      if (prefs.chime) audio.completion();
+      celebrate(el.circle);
       el.phase.textContent = 'Session complete';
       el.phaseSub.textContent = 'Nice work. Saved to this device.';
       el.stepTimer.textContent = 'Done';
@@ -476,7 +536,10 @@ $('testVoiceBtn').onclick = () => {
   // speak() reports back through the blocked handler if nothing comes out.
   setTimeout(() => {
     if (el.voiceStatus.textContent === 'Speaking…') {
-      setVoiceStatus('Voice is working. If a session is silent, check the side switch is not on mute.');
+      // The ringer switch does not affect speech, so it is not the thing to
+      // blame if this worked but the chime and soundscape stay silent.
+      setVoiceStatus('Voice is working. If the chime and soundscape are silent but this '
+        + 'was not, check the side ring/silent switch.');
     }
   }, 1200);
 };
@@ -567,6 +630,25 @@ function hydrateControls() {
   $('hapticsToggle').checked = prefs.haptics;
   $('wakeToggle').checked = prefs.keepAwake;
   el.customCard.hidden = pattern.id !== CUSTOM_ID;
+
+  // iOS Safari has no Vibration API at all, so the switch can never do anything
+  // there. Say so rather than leaving a control that silently does nothing.
+  const hapticsToggle = $('hapticsToggle');
+  if (!audio.vibrationSupported()) {
+    hapticsToggle.checked = false;
+    hapticsToggle.disabled = true;
+    const row = hapticsToggle.closest('.toggle');
+    row?.classList.add('unavailable');
+    const note = row?.querySelector('.toggle-text span');
+    if (note) note.textContent = 'Not available in this browser — iOS has no vibration API';
+  }
+
+  const silentNote = $('silentSwitchNote');
+  if (silentNote) {
+    silentNote.textContent = audio.audioState().sessionType
+      ? 'Audio is set to play through the ring/silent switch.'
+      : 'On iPhone, the side ring/silent switch mutes these sounds. Spoken guidance still plays.';
+  }
 
   CUSTOM_FIELDS.forEach(([id, kind]) => {
     $(id).value = String(customPattern.steps.find((step) => step.kind === kind)?.seconds ?? 0);
