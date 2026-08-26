@@ -213,6 +213,33 @@ td.num { font-variant-numeric: tabular-nums; }
 
 .badge { display: inline-block; font-size: .7rem; padding: 2px 8px; border-radius: 999px; background: rgba(199, 255, 216, .18); color: var(--accent2); border: 1px solid rgba(199, 255, 216, .28); }
 
+/* ------------------------------------------------------------- insights */
+
+.breath-total { font-size: clamp(2.2rem, 7vw, 3rem); font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 6px 0 8px; }
+
+.chart-wrap { margin-top: 12px; }
+.chart { display: block; width: 100%; overflow: visible; }
+.pace-chart { height: 96px; }
+
+.heatmap-wrap { overflow-x: auto; }
+.heatmap { min-width: 190px; height: auto; }
+.heatmap .cell { transition: opacity .15s; }
+.heatmap .cell:hover { opacity: .75; }
+
+/* Fixed thresholds: 0 / under 5 / under 10 / under 20 / 20+ minutes a day. */
+.cell.level-0, .legend-cell.level-0 { fill: rgba(255, 255, 255, .07); background: rgba(255, 255, 255, .07); }
+.cell.level-1, .legend-cell.level-1 { fill: rgba(158, 232, 255, .28); background: rgba(158, 232, 255, .28); }
+.cell.level-2, .legend-cell.level-2 { fill: rgba(158, 232, 255, .5);  background: rgba(158, 232, 255, .5); }
+.cell.level-3, .legend-cell.level-3 { fill: rgba(158, 232, 255, .74); background: rgba(158, 232, 255, .74); }
+.cell.level-4, .legend-cell.level-4 { fill: rgba(199, 255, 216, .95); background: rgba(199, 255, 216, .95); }
+
+.legend { display: flex; align-items: center; gap: 5px; margin-top: 10px; }
+.legend-cell { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.legend .tiny { margin: 0 2px; }
+
+/* The completion bloom. Sits above the page, below the toast, inert to input. */
+.celebrate-layer { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+
 /* ----------------------------------------------------------- health rows */
 
 .health-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .1); }

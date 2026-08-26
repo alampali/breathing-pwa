@@ -167,12 +167,39 @@
       <!-- History -->
       <div class="tabpanel" id="panel-history" role="tabpanel" aria-labelledby="tab-history">
         <div class="card">
+          <h2>Breaths taken</h2>
+          <div class="breath-total"><span id="statBreaths">0</span></div>
+          <p class="note" id="breathNote">Every guided breath since you started.</p>
+        </div>
+
+        <div class="card">
           <h2>Your practice</h2>
           <div class="stats-grid" style="margin-top:12px">
             <div class="stat-mini"><div class="label">Current streak</div><div class="value" id="statStreak">0 days</div></div>
             <div class="stat-mini"><div class="label">Today</div><div class="value" id="statToday">0 min</div></div>
             <div class="stat-mini"><div class="label">Total sessions</div><div class="value" id="statCount">0</div></div>
             <div class="stat-mini"><div class="label">Total minutes</div><div class="value" id="statMinutes">0</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Pace</h2>
+          <p class="note">Average breaths per minute per day. Slower is deeper practice, so a line that drifts downward is the thing to look for.</p>
+          <div id="paceChart" class="chart-wrap"></div>
+          <p class="tiny" id="paceSummary"></p>
+        </div>
+
+        <div class="card">
+          <h2>Last 13 weeks</h2>
+          <div id="heatmap" class="chart-wrap heatmap-wrap"></div>
+          <div class="legend">
+            <span class="tiny">Less</span>
+            <span class="legend-cell level-0"></span>
+            <span class="legend-cell level-1"></span>
+            <span class="legend-cell level-2"></span>
+            <span class="legend-cell level-3"></span>
+            <span class="legend-cell level-4"></span>
+            <span class="tiny">More</span>
           </div>
         </div>
 

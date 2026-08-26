@@ -52,6 +52,9 @@ js/engine.js          session clock and breath position — no DOM, no audio
 js/audio.js           generated soundscapes and cues (Web Audio, no files)
 js/storage.js         localStorage: sessions, stats, prefs, CSV/JSON export
 js/health.js          Apple Health bridge
+js/insights.js        derived views: breath count, pace series, heatmap
+js/charts.js          small SVG charts, built with DOM calls
+js/celebrate.js       the completion bloom (canvas)
 js/app.js             wires the above to the DOM
 ```
 
@@ -88,6 +91,47 @@ of failing silently. **Test voice** there both unlocks the engine and confirms i
 One thing none of this can fix: the iPhone's hardware silent switch mutes both speech
 and the generated ambience. If a session is silent with everything enabled, check that
 switch first.
+
+### Practice insights
+
+The History tab shows three views, all derived from records the app has been writing
+since day one — no schema change, so they populate from existing history immediately.
+
+**Lifetime breath count.** The sum of every session's cycles. Legacy records from the
+single-file version carry no cycle count and contribute zero rather than `NaN`.
+
+**Pace.** Average breaths per minute, aggregated by day.
+
+Pace is a property of the *pattern* — 4-7-8 is always about 3.2 bpm — so plotting it per
+session just draws a sawtooth of which pattern was picked. Aggregating by day and
+dividing total cycles by total minutes weights each session by its length for free.
+
+Even by day it is too noisy to read: alternating between box breathing and extended
+exhale swings the line by 2 bpm overnight, burying the slow drift underneath. So the
+chart draws two lines — the raw daily figure faint, and a 7-day rolling average in
+front. The rolling figure is weighted the same way (total breaths over total minutes
+across the window), so it stays the same quantity, just steadier. Tests assert both that
+smoothing flattens a 3 bpm daily swing to under 0.6, and that it neither hides a real
+trend nor invents one on flat data.
+
+**Heatmap.** Minutes per day over 13 weeks, bucketed into five fixed bands rather than
+quartiles, so a quiet month still reads as quiet. Columns run Sunday-first and the last
+column contains today, so today is never clipped off the edge. Days are local, not UTC —
+an 11:30pm session belongs to that evening.
+
+### Session completion
+
+`celebrate.js` blooms outward from the breath circle: three rings expanding and thinning
+like ripples, and soft motes drifting up and fading, over about three seconds.
+
+Deliberately not confetti, which is loud, fast and congratulatory — the opposite of how
+the end of a session feels. It asks for no response and shows no score.
+
+It blooms from the middle of the screen if the breath circle is out of view, since
+scrolling down to another tab mid-session would otherwise paint the whole animation
+off-screen. Under `prefers-reduced-motion` it fades a single halo and drops the motes.
+The canvas is inert to input and removes itself, with a timeout fallback because
+animation frames stop firing in a hidden tab.
 
 ### Storage
 
@@ -181,7 +225,7 @@ need — a fake clock plus `requestAnimationFrame` for the engine, a fake `local
 for the store — and then exercise the real code.
 
 ```bash
-node tests/engine.test.mjs && node tests/storage.test.mjs
+node tests/engine.test.mjs && node tests/storage.test.mjs && node tests/insights.test.mjs
 ```
 
 The engine tests check phase order and timing for every pattern, that the circle's

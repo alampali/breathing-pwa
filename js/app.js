@@ -5,6 +5,9 @@ import {
 import * as store from './storage.js';
 import * as audio from './audio.js';
 import * as health from './health.js';
+import * as insights from './insights.js';
+import { paceChart, heatmapGrid } from './charts.js';
+import { celebrate } from './celebrate.js';
 import { createEngine } from './engine.js';
 
 const $ = (id) => document.getElementById(id);
@@ -152,6 +155,8 @@ function renderHistory() {
   $('statCount').textContent = String(stats.count);
   $('statMinutes').textContent = String(stats.totalMinutes);
 
+  renderInsights(sessions);
+
   renderHealthList(sessions);
 
   if (sessions.length === 0) {
@@ -172,6 +177,45 @@ function renderHistory() {
       <tbody>${rows}</tbody></table>`;
   }
 
+}
+
+/* ---------------------------------------------------------------- insights */
+
+function renderInsights(sessions) {
+  const breaths = insights.lifetimeBreaths(sessions);
+  $('statBreaths').textContent = breaths.toLocaleString();
+  $('breathNote').textContent = breaths === 0
+    ? 'Your breaths will be counted here from your first session.'
+    : 'Every guided breath since you started.';
+
+  const series = insights.paceSeries(sessions);
+  const chart = $('paceChart');
+  chart.innerHTML = '';
+  const summary = $('paceSummary');
+
+  if (series.length < 2) {
+    chart.innerHTML = '<div class="empty">A few more days of practice and your pace will show up here.</div>';
+    summary.textContent = '';
+  } else {
+    chart.appendChild(paceChart(series));
+    const trend = insights.paceTrend(series);
+    const latest = insights.formatBpm(series.at(-1).bpm);
+    if (!trend) {
+      summary.textContent = `Most recent day: ${latest} breaths per minute.`;
+    } else if (Math.abs(trend.delta) < 0.05) {
+      summary.textContent = `Holding steady around ${insights.formatBpm(trend.to)} breaths per minute.`;
+    } else if (trend.slower) {
+      summary.textContent = `You have slowed from ${insights.formatBpm(trend.from)} to `
+        + `${insights.formatBpm(trend.to)} breaths per minute — about ${trend.percent.toFixed(0)}% slower.`;
+    } else {
+      summary.textContent = `Currently ${insights.formatBpm(trend.to)} breaths per minute, `
+        + `up from ${insights.formatBpm(trend.from)}. Longer patterns will bring it back down.`;
+    }
+  }
+
+  const grid = $('heatmap');
+  grid.innerHTML = '';
+  grid.appendChild(heatmapGrid(insights.heatmap(sessions)));
 }
 
 /* ------------------------------------------------------------- health tab */
@@ -308,6 +352,7 @@ const engine = createEngine({
 
     if (result.completed) {
       if (prefs.chime) audio.cue('done');
+      celebrate(el.circle);
       el.phase.textContent = 'Session complete';
       el.phaseSub.textContent = 'Nice work. Saved to this device.';
       el.stepTimer.textContent = 'Done';
