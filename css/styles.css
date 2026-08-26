@@ -325,3 +325,7 @@ ol.steps code { background: rgba(255, 255, 255, .12); padding: 1px 6px; border-r
   .orb { animation: none; }
   .breath-circle { transition: none; }
 }
+
+/* A setting the platform cannot honour — shown, but visibly inert. */
+.toggle.unavailable { opacity: .5; cursor: default; }
+.toggle.unavailable .switch { background: rgba(255, 255, 255, .1); }

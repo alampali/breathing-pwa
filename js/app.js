@@ -22,7 +22,8 @@ const el = {
   startBtn: $('startBtn'), pauseBtn: $('pauseBtn'), resetBtn: $('resetBtn'),
   patternList: $('patternList'), patternNote: $('patternNote'), patternMath: $('patternMath'),
   customCard: $('customCard'),
-  soundRow: $('soundRow'), volume: $('volume'), voiceStatus: $('voiceStatus'),
+  soundRow: $('soundRow'), volume: $('volume'),
+  voiceStatus: $('voiceStatus'), soundStatus: $('soundStatus'),
   logArea: $('logArea'), healthList: $('healthList'), healthIntro: $('healthIntro'),
   toast: $('toast'),
 };
@@ -54,6 +55,10 @@ function toast(message) {
 
 function setVoiceStatus(message) {
   el.voiceStatus.textContent = message;
+}
+
+function setSoundStatus(message) {
+  el.soundStatus.textContent = message;
 }
 
 function setScale(fullness) {
@@ -137,8 +142,17 @@ function renderSoundscapes() {
     button.setAttribute('aria-pressed', String(sound.id === prefs.soundscape));
     button.onclick = () => {
       prefs = store.setPrefs({ soundscape: sound.id });
-      audio.setSoundscape(sound.id);
+      if (engine.state === 'running' || engine.state === 'paused') {
+        audio.setSoundscape(sound.id);
+      } else {
+        // Outside a session, audition it. This tap is also a user gesture, so it
+        // doubles as the unlock that lets audio play at all on iOS.
+        audio.preview(sound.id);
+      }
       renderSoundscapes();
+      setSoundStatus(sound.id === 'none'
+        ? 'Sessions will run in silence.'
+        : `Playing a few seconds of ${sound.label.toLowerCase()}…`);
     };
     el.soundRow.appendChild(button);
   });
@@ -320,9 +334,7 @@ const engine = createEngine({
 
     if (prefs.chime) audio.cue(step.kind);
     if (prefs.voice) audio.speak(step.label);
-    if (prefs.haptics && navigator.vibrate) {
-      navigator.vibrate(step.kind === 'inhale' ? [50, 40, 50] : 45);
-    }
+    if (prefs.haptics) audio.vibrate(step.kind === 'inhale' ? [50, 40, 50] : 45);
   },
 
   onComplete(result) {
@@ -351,7 +363,10 @@ const engine = createEngine({
     }
 
     if (result.completed) {
-      if (prefs.chime) audio.cue('done');
+      // A struck bowl rather than another phase chime — about six seconds of
+      // decay under the bloom. Still governed by the chime setting: turning
+      // cues off means not being rung at.
+      if (prefs.chime) audio.completion();
       celebrate(el.circle);
       el.phase.textContent = 'Session complete';
       el.phaseSub.textContent = 'Nice work. Saved to this device.';
@@ -521,7 +536,10 @@ $('testVoiceBtn').onclick = () => {
   // speak() reports back through the blocked handler if nothing comes out.
   setTimeout(() => {
     if (el.voiceStatus.textContent === 'Speaking…') {
-      setVoiceStatus('Voice is working. If a session is silent, check the side switch is not on mute.');
+      // The ringer switch does not affect speech, so it is not the thing to
+      // blame if this worked but the chime and soundscape stay silent.
+      setVoiceStatus('Voice is working. If the chime and soundscape are silent but this '
+        + 'was not, check the side ring/silent switch.');
     }
   }, 1200);
 };
@@ -612,6 +630,25 @@ function hydrateControls() {
   $('hapticsToggle').checked = prefs.haptics;
   $('wakeToggle').checked = prefs.keepAwake;
   el.customCard.hidden = pattern.id !== CUSTOM_ID;
+
+  // iOS Safari has no Vibration API at all, so the switch can never do anything
+  // there. Say so rather than leaving a control that silently does nothing.
+  const hapticsToggle = $('hapticsToggle');
+  if (!audio.vibrationSupported()) {
+    hapticsToggle.checked = false;
+    hapticsToggle.disabled = true;
+    const row = hapticsToggle.closest('.toggle');
+    row?.classList.add('unavailable');
+    const note = row?.querySelector('.toggle-text span');
+    if (note) note.textContent = 'Not available in this browser — iOS has no vibration API';
+  }
+
+  const silentNote = $('silentSwitchNote');
+  if (silentNote) {
+    silentNote.textContent = audio.audioState().sessionType
+      ? 'Audio is set to play through the ring/silent switch.'
+      : 'On iPhone, the side ring/silent switch mutes these sounds. Spoken guidance still plays.';
+  }
 
   CUSTOM_FIELDS.forEach(([id, kind]) => {
     $(id).value = String(customPattern.steps.find((step) => step.kind === kind)?.seconds ?? 0);

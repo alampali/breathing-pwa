@@ -1,17 +1,18 @@
 // The moment a session completes.
 //
 // Deliberately not confetti. Confetti is loud, fast and congratulatory, which is
-// the opposite of how the end of a breathing session feels. This is a slow bloom
-// outward from the breath circle: a few rings expanding and thinning like
-// ripples, and soft motes drifting up and fading, in the app's own palette.
-// It takes about three seconds and asks for no response.
+// the opposite of how the end of a breathing session feels. This is a bloom
+// outward from the breath circle: a soft flash of light at the centre, rings
+// expanding and thinning like ripples, and motes drifting up and fading, all in
+// the app's own palette. It runs about five seconds under the closing bowl
+// strike and asks for no response.
 
-const RING_COUNT = 3;
-const RING_LIFE = 2400;      // ms for a ring to expand and vanish
-const RING_STAGGER = 320;
-const MOTE_COUNT = 34;
-const MOTE_LIFE = 3200;
-const TOTAL = 3600;
+const RING_COUNT = 5;
+const RING_LIFE = 2600;      // ms for a ring to expand and vanish
+const RING_STAGGER = 260;
+const MOTE_COUNT = 90;
+const MOTE_LIFE = 4200;
+const TOTAL = 5200;
 
 const TINTS = [
   [158, 232, 255],   // --accent
@@ -44,11 +45,11 @@ function makeMotes(originX, originY, spread) {
     return {
       x: originX + Math.cos(angle) * distance,
       y: originY + Math.sin(angle) * distance * 0.6,
-      radius: 1.2 + Math.random() * 2.6,
-      rise: 26 + Math.random() * 62,                      // px travelled upward
-      sway: 8 + Math.random() * 22,
+      radius: 1.8 + Math.random() * 4.2,
+      rise: 90 + Math.random() * 240,                     // px travelled upward
+      sway: 14 + Math.random() * 40,
       phase: Math.random() * Math.PI * 2,
-      delay: Math.random() * 900,
+      delay: Math.random() * 1100,
       life: MOTE_LIFE * (0.55 + Math.random() * 0.45),
       tint: TINTS[Math.floor(Math.random() * TINTS.length)],
     };
@@ -100,33 +101,60 @@ export function celebrate(anchor) {
 
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
+    // Additive blending: overlapping light accumulates instead of painting over
+    // itself, which is what makes this read as glow rather than as flat circles.
+    ctx.globalCompositeOperation = 'lighter';
+
+    // The flash. Swells fast, fades slowly, and carries most of the impact.
+    const flashT = elapsed / (reduced ? 2200 : 1800);
+    if (flashT < 1) {
+      const swell = flashT < 0.18 ? flashT / 0.18 : 1 - (flashT - 0.18) / 0.82;
+      const radius = baseRadius * (1.1 + easeOut(flashT) * 1.9);
+      const glow = ctx.createRadialGradient(originX, originY, 0, originX, originY, radius);
+      const peak = Math.max(0, swell) * (reduced ? 0.28 : 0.66);
+      glow.addColorStop(0, `rgba(226, 250, 255, ${peak.toFixed(3)})`);
+      glow.addColorStop(0.45, `rgba(158, 232, 255, ${(peak * 0.42).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(158, 232, 255, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(originX, originY, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     for (let i = 0; i < rings; i += 1) {
       const t = (elapsed - i * RING_STAGGER) / RING_LIFE;
       if (t <= 0 || t >= 1) continue;
-      const radius = baseRadius * (0.82 + easeOut(t) * 2.6);
-      const alpha = (1 - t) * (reduced ? 0.22 : 0.42);
+      const radius = baseRadius * (0.8 + easeOut(t) * 3.6);
+      const alpha = (1 - t) * (reduced ? 0.3 : 0.75);
       const [r, g, b] = TINTS[i % TINTS.length];
       ctx.beginPath();
       ctx.arc(originX, originY, radius, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
-      ctx.lineWidth = Math.max(0.6, 2.4 * (1 - t));
+      ctx.lineWidth = Math.max(0.8, 4.5 * (1 - t));
+      ctx.shadowBlur = 18 * (1 - t);
+      ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(alpha * 0.9).toFixed(3)})`;
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
 
     motes.forEach((mote) => {
       const t = (elapsed - mote.delay) / mote.life;
       if (t <= 0 || t >= 1) return;
       // Fade in over the first fifth, then out across the rest.
-      const alpha = (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8) * 0.85;
+      const alpha = (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8);
       const x = mote.x + Math.sin(mote.phase + t * Math.PI * 2) * mote.sway;
       const y = mote.y - easeOut(t) * mote.rise;
       const [r, g, b] = mote.tint;
       ctx.beginPath();
       ctx.arc(x, y, mote.radius, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${Math.max(0, alpha).toFixed(3)})`;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${Math.max(0, alpha * 0.8).toFixed(3)})`;
       ctx.fill();
     });
 
+    ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = 'source-over';
     frame = requestAnimationFrame(draw);
   }
 

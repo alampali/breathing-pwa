@@ -1,15 +1,22 @@
-// Generated ambience and phase cues. No audio files, no network requests —
-// everything here is synthesised with the Web Audio API.
+// Generated ambience and cues. No audio files, no network requests — everything
+// here is synthesised with the Web Audio API.
 //
 // One AudioContext is created lazily on the first user gesture and then reused,
 // so switching soundscape mid-session does not restart or lose the pause state.
+//
+// Two iOS behaviours shape most of what follows:
+//
+//   1. The ringer switch mutes Web Audio. Speech synthesis is *not* muted by it,
+//      which is why guidance can be audible while the chime and soundscape are
+//      silent. Declaring an audio session of type "playback" opts out of that.
+//   2. The context can land in "suspended" or WebKit's "interrupted" state after
+//      a call, an alarm, or a locked screen, and does not recover on its own.
 
 let ctx = null;
 let master = null;
 let bed = null;          // nodes belonging to the current soundscape
 let current = 'none';
 let volume = 0.5;
-let noiseBuffer = null;
 
 export const SOUNDSCAPES = [
   { id: 'ocean', label: 'Ocean' },
@@ -18,30 +25,87 @@ export const SOUNDSCAPES = [
   { id: 'none',  label: 'Silent' },
 ];
 
+/**
+ * Ask iOS to treat this as media playback so the ringer switch stops muting it.
+ * Safari 16.4+; a no-op everywhere else.
+ */
+function claimPlaybackSession() {
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  } catch {
+    // Not supported — the ringer switch will still mute us, nothing to be done.
+  }
+}
+
 function ensureContext() {
   if (ctx) return ctx;
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
+  claimPlaybackSession();
   ctx = new AudioCtx();
+
+  // A safety limiter on the way out. The closing bowl stacks five partials, a
+  // strike and a shimmer, and at full volume that peaked around 1.37 — hard
+  // clipping, which on a phone speaker is an audible crackle at precisely the
+  // calmest moment. It also covers a cue landing on top of a soundscape.
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -3;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.25;
+  limiter.connect(ctx.destination);
+
   master = ctx.createGain();
   master.gain.value = volume;
-  master.connect(ctx.destination);
+  master.connect(limiter);
+
+  // "interrupted" is WebKit-only and does not clear itself. Without this a phone
+  // call or a locked screen leaves the rest of the session silent.
+  ctx.addEventListener?.('statechange', () => {
+    if (ctx && ctx.state !== 'running') ctx.resume?.().catch(() => {});
+  });
   return ctx;
 }
 
-function getNoiseBuffer() {
-  if (noiseBuffer) return noiseBuffer;
+/**
+ * Nudges the context back to running and reports whether audio can be heard.
+ * Scheduling still works while suspended — the sound simply arrives on resume —
+ * so callers should go ahead rather than bail.
+ */
+function wake() {
+  if (!ensureContext()) return false;
+  if (ctx.state !== 'running') ctx.resume?.().catch(() => {});
+  return true;
+}
+
+const noiseBuffers = {};
+
+/**
+ * Brown noise falls off steeply with frequency, so it suits the ocean's low
+ * wash but has almost nothing left to give a band-pass up at 2kHz — filtering
+ * it there rendered the rain about five times quieter than every other bed.
+ * Rain is built from white noise instead, which is what actual rain sounds like.
+ */
+function getNoiseBuffer(colour = 'brown') {
+  if (noiseBuffers[colour]) return noiseBuffers[colour];
   const length = ctx.sampleRate * 3;
-  noiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  // Brownian-ish noise: softer and less hissy than white noise.
-  let last = 0;
-  for (let i = 0; i < length; i += 1) {
-    const white = Math.random() * 2 - 1;
-    last = (last + 0.02 * white) / 1.02;
-    data[i] = last * 3.5;
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  if (colour === 'white') {
+    for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+  } else {
+    let last = 0;
+    for (let i = 0; i < length; i += 1) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[i] = last * 3.5;
+    }
   }
-  return noiseBuffer;
+
+  noiseBuffers[colour] = buffer;
+  return buffer;
 }
 
 function teardownBed() {
@@ -52,6 +116,11 @@ function teardownBed() {
   });
   bed = null;
 }
+
+// Levels and cutoffs are pitched for a phone speaker, which rolls off steeply
+// below roughly 500Hz. An earlier version filtered the ocean down to 420Hz and
+// was close to inaudible on an iPhone while sounding fine on headphones.
+const BED_LEVEL = { ocean: 0.34, rain: 0.3, bowl: 0.28 };
 
 function buildBed(id) {
   teardownBed();
@@ -65,19 +134,19 @@ function buildBed(id) {
 
   if (id === 'ocean' || id === 'rain') {
     const source = ctx.createBufferSource();
-    source.buffer = getNoiseBuffer();
+    source.buffer = getNoiseBuffer(id === 'rain' ? 'white' : 'brown');
     source.loop = true;
 
     const filter = ctx.createBiquadFilter();
     filter.type = id === 'ocean' ? 'lowpass' : 'bandpass';
-    filter.frequency.value = id === 'ocean' ? 420 : 1800;
-    filter.Q.value = id === 'ocean' ? 0.7 : 0.9;
+    filter.frequency.value = id === 'ocean' ? 900 : 2400;
+    filter.Q.value = id === 'ocean' ? 1.2 : 0.7;
 
     // Slow sweep of the filter gives the sense of waves / shifting rain.
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
     lfo.frequency.value = id === 'ocean' ? 0.07 : 0.13;
-    lfoGain.gain.value = id === 'ocean' ? 260 : 420;
+    lfoGain.gain.value = id === 'ocean' ? 520 : 900;
     lfo.connect(lfoGain);
     lfoGain.connect(filter.frequency);
 
@@ -89,9 +158,9 @@ function buildBed(id) {
   }
 
   if (id === 'bowl') {
-    // A fundamental plus two quiet partials, each drifting slightly out of
-    // phase with the others so the drone never sits perfectly still.
-    [[174, 0.5], [261.6, 0.22], [392, 0.12]].forEach(([freq, level], index) => {
+    // Pitched an octave up from the traditional 174Hz so a phone speaker can
+    // actually reproduce the fundamental.
+    [[220, 0.5], [330, 0.24], [440, 0.16], [660, 0.08]].forEach(([freq, level], index) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -101,7 +170,7 @@ function buildBed(id) {
       const drift = ctx.createOscillator();
       const driftGain = ctx.createGain();
       drift.frequency.value = 0.05 + index * 0.017;
-      driftGain.gain.value = 0.06 * level;
+      driftGain.gain.value = 0.07 * level;
       drift.connect(driftGain);
       driftGain.connect(gain.gain);
 
@@ -115,7 +184,7 @@ function buildBed(id) {
 
   // Fade the bed in rather than clicking it on.
   bus.gain.setValueAtTime(0, ctx.currentTime);
-  bus.gain.linearRampToValueAtTime(id === 'bowl' ? 0.10 : 0.16, ctx.currentTime + 2.5);
+  bus.gain.linearRampToValueAtTime(BED_LEVEL[id] ?? 0.3, ctx.currentTime + 2.2);
   bed = nodes;
 }
 
@@ -129,14 +198,14 @@ export function setVolume(value) {
 export function setSoundscape(id) {
   current = id;
   if (!ctx) return;          // takes effect the next time audio starts
+  wake();
   buildBed(id);
 }
 
 /** Must be called from a user gesture the first time. */
 export function start(id = current) {
   current = id;
-  if (!ensureContext()) return;
-  if (ctx.state === 'suspended') ctx.resume();
+  if (!wake()) return;
   buildBed(current);
 }
 
@@ -149,30 +218,143 @@ export function suspend() {
 }
 
 export function resume() {
-  if (ctx && ctx.state === 'suspended') ctx.resume();
+  if (ctx && ctx.state !== 'running') ctx.resume?.().catch(() => {});
+}
+
+/** Whether audio is currently able to make a sound, for the Sound tab's check. */
+export function audioState() {
+  return {
+    supported: Boolean(window.AudioContext || window.webkitAudioContext),
+    created: Boolean(ctx),
+    state: ctx?.state ?? 'none',
+    sessionType: (() => {
+      try { return navigator.audioSession?.type ?? null; } catch { return null; }
+    })(),
+  };
 }
 
 const CUE_PITCH = { inhale: 587.33, hold: 783.99, exhale: 440, holdOut: 349.23, done: 523.25 };
 
-/** Short bell on phase change. */
+/**
+ * Short bell on phase change.
+ *
+ * This used to return early unless the context was exactly "running", which on
+ * iOS meant no chime at all for most of a session — the context is routinely
+ * suspended or interrupted and only recovers when asked. Waking it and
+ * scheduling anyway is both louder and far more reliable.
+ */
 export function cue(kind) {
-  if (!ensureContext() || ctx.state !== 'running') return;
+  if (!wake()) return;
   const now = ctx.currentTime;
   const freq = CUE_PITCH[kind] ?? 523.25;
 
   const osc = ctx.createOscillator();
+  const partial = ctx.createOscillator();
   const gain = ctx.createGain();
+  const partialGain = ctx.createGain();
+
   osc.type = 'sine';
   osc.frequency.value = freq;
+  partial.type = 'sine';
+  partial.frequency.value = freq * 2.01;   // slight detune gives it a bell edge
 
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+  gain.gain.linearRampToValueAtTime(0.5, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
+
+  partialGain.gain.setValueAtTime(0, now);
+  partialGain.gain.linearRampToValueAtTime(0.16, now + 0.01);
+  partialGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
 
   osc.connect(gain);
+  partial.connect(partialGain);
   gain.connect(master);
+  partialGain.connect(master);
   osc.start(now);
-  osc.stop(now + 1.7);
+  partial.start(now);
+  osc.stop(now + 2);
+  partial.stop(now + 1);
+}
+
+/**
+ * The end of a session: a struck bowl rather than another phase chime.
+ *
+ * A stack of detuned partials with staggered decays, a soft noise transient for
+ * the strike itself, and a shimmer an octave up. Runs about six seconds and is
+ * deliberately much louder and longer than `cue` — this is the moment the whole
+ * session lands on.
+ */
+export function completion() {
+  if (!wake()) return;
+  const now = ctx.currentTime;
+
+  const bus = ctx.createGain();
+  bus.gain.value = 0.75;
+  bus.connect(master);
+
+  // Struck partials. Lower ones ring longer, as a real bowl does.
+  const partials = [
+    { freq: 261.63, level: 0.62, decay: 6.0 },
+    { freq: 392.00, level: 0.34, decay: 4.6 },
+    { freq: 523.25, level: 0.26, decay: 3.4 },
+    { freq: 784.00, level: 0.14, decay: 2.4 },
+    { freq: 1046.5, level: 0.08, decay: 1.6 },
+  ];
+
+  partials.forEach(({ freq, level, decay }, index) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    // A touch of detune per partial stops it sounding like a synth chord.
+    osc.frequency.setValueAtTime(freq * (1 + (index % 2 ? 0.0016 : -0.0016)), now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(level, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+    osc.connect(gain);
+    gain.connect(bus);
+    osc.start(now);
+    osc.stop(now + decay + 0.1);
+  });
+
+  // The strike: a very short filtered noise burst under the attack.
+  const strike = ctx.createBufferSource();
+  strike.buffer = getNoiseBuffer('white');
+  const strikeFilter = ctx.createBiquadFilter();
+  strikeFilter.type = 'bandpass';
+  strikeFilter.frequency.value = 1400;
+  strikeFilter.Q.value = 0.8;
+  const strikeGain = ctx.createGain();
+  strikeGain.gain.setValueAtTime(0.34, now);
+  strikeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+  strike.connect(strikeFilter);
+  strikeFilter.connect(bus);
+  strike.start(now);
+  strike.stop(now + 0.4);
+
+  // A slow shimmer that swells after the strike and fades with the tail.
+  const shimmer = ctx.createOscillator();
+  const shimmerGain = ctx.createGain();
+  shimmer.type = 'sine';
+  shimmer.frequency.setValueAtTime(1568, now);
+  shimmerGain.gain.setValueAtTime(0, now);
+  shimmerGain.gain.linearRampToValueAtTime(0.05, now + 0.9);
+  shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 5.0);
+  shimmer.connect(shimmerGain);
+  shimmerGain.connect(bus);
+  shimmer.start(now);
+  shimmer.stop(now + 5.2);
+}
+
+/** Plays the given soundscape briefly so it can be auditioned outside a session. */
+export function preview(id, seconds = 3.5) {
+  if (id === 'none' || !wake()) return;
+  const previous = current;
+  buildBed(id);
+  const previewing = bed;
+  setTimeout(() => {
+    // Leave it alone if a real session has since taken over the bed.
+    if (bed === previewing) buildBed(previous === id ? id : 'none');
+  }, seconds * 1000);
 }
 
 /* ------------------------------------------------------------------ speech */
@@ -267,4 +449,24 @@ export function speak(text) {
 
 export function cancelSpeech() {
   if (speechSupported()) synth().cancel();
+}
+
+/* --------------------------------------------------------------- vibration */
+
+/**
+ * iOS Safari does not implement the Vibration API at all — `navigator.vibrate`
+ * is simply absent, so the setting can never do anything on an iPhone. Callers
+ * use this to say so plainly rather than leaving a switch that does nothing.
+ */
+export function vibrationSupported() {
+  return typeof navigator.vibrate === 'function';
+}
+
+export function vibrate(pattern) {
+  if (!vibrationSupported()) return false;
+  try {
+    return navigator.vibrate(pattern);
+  } catch {
+    return false;
+  }
 }

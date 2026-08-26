@@ -71,6 +71,49 @@ Backgrounding the page auto-pauses the session. Animation frames stop firing in 
 hidden tab anyway, and letting the audio run on while the visuals froze would put the
 two out of sync.
 
+### Sound and iOS
+
+Three separate things made the soundscapes and chime unreliable on an iPhone, and
+`audio.js` addresses each:
+
+- **The ringer switch mutes Web Audio.** Speech synthesis is *not* muted by it, which is
+  exactly why guidance could be audible while the chime and soundscape were silent —
+  it reads as "sound works sometimes". Declaring `navigator.audioSession.type =
+  "playback"` (Safari 16.4+) opts out. Where that API is missing the Sound tab says so
+  rather than leaving it a mystery.
+- **The context stops and does not restart.** It can land in `suspended` or WebKit's
+  `interrupted` state after a call, an alarm or a locked screen. A `statechange`
+  listener resumes it.
+- **`cue()` used to give up.** It returned early unless the context was exactly
+  `running`, which on iOS meant no chime for most of a session. It now wakes the context
+  and schedules regardless — while suspended the sound simply arrives on resume.
+
+Levels and cutoffs are pitched for a phone speaker, which rolls off steeply below about
+500Hz. The ocean was previously filtered down to 420Hz and the bowl's fundamental was
+174Hz: fine on headphones, close to inaudible on an iPhone.
+
+Rain is built from **white** noise while the ocean uses brown. Brown noise falls off
+steeply with frequency, so band-passing it at 2.4kHz left almost nothing — measured, the
+rain bed rendered about five times quieter than every other soundscape.
+
+A `DynamicsCompressorNode` sits between the master gain and the destination as a safety
+limiter. The closing bowl stacks five partials, a strike and a shimmer, which peaked at
+1.37 at full volume — hard clipping, heard as a crackle at the calmest possible moment.
+
+These levels were checked by rendering each sound through an `OfflineAudioContext` and
+measuring peak and RMS, rather than by ear. Roughly, at half volume: beds sit near 0.03
+RMS, a phase cue peaks around 0.31, and the closing bowl peaks around 0.57 — under 1.0
+even at full volume with a soundscape playing underneath.
+
+Tapping a soundscape outside a session auditions it for a few seconds. That doubles as
+the user gesture iOS needs before it will allow any audio at all.
+
+### Vibration
+
+iOS Safari does not implement the Vibration API — `navigator.vibrate` is simply absent,
+so the setting can never do anything on an iPhone. Rather than leaving a switch that
+silently does nothing, the app detects this and disables the control with an explanation.
+
 ### Spoken cues and iOS
 
 Speech is the fiddliest part of the app, and iOS is the reason. Three behaviours
@@ -88,9 +131,9 @@ conspire to drop utterances, and `audio.js` handles each explicitly:
 If a cue is requested and no `onstart` fires within 700ms, the Sound tab says so instead
 of failing silently. **Test voice** there both unlocks the engine and confirms it works.
 
-One thing none of this can fix: the iPhone's hardware silent switch mutes both speech
-and the generated ambience. If a session is silent with everything enabled, check that
-switch first.
+Note that the ringer switch does **not** mute speech, only Web Audio. That asymmetry is
+the clue worth remembering: guidance you can hear while the chime and soundscape are
+silent points at the switch (or the audio session), not at the speech code.
 
 ### Practice insights
 
@@ -121,8 +164,13 @@ an 11:30pm session belongs to that evening.
 
 ### Session completion
 
-`celebrate.js` blooms outward from the breath circle: three rings expanding and thinning
-like ripples, and soft motes drifting up and fading, over about three seconds.
+`celebrate.js` blooms outward from the breath circle: a flash of light at the centre,
+five rings expanding and thinning like ripples, and ninety motes drifting up and fading,
+over about five seconds — under a struck bowl that rings for six.
+
+Drawing uses additive blending (`globalCompositeOperation = 'lighter'`) so overlapping
+light accumulates instead of painting over itself, which is what makes it read as glow
+rather than as flat circles.
 
 Deliberately not confetti, which is loud, fast and congratulatory — the opposite of how
 the end of a session feels. It asks for no response and shows no score.
