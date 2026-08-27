@@ -89,13 +89,20 @@
     <aside class="panel side">
       <div class="tabs" role="tablist" aria-label="Settings">
         <button role="tab" id="tab-pattern" aria-controls="panel-pattern" aria-selected="true">Pattern</button>
-        <button role="tab" id="tab-sound"   aria-controls="panel-sound"   aria-selected="false">Sound</button>
+        <button role="tab" id="tab-sound"   aria-controls="panel-sound"   aria-selected="false">Settings</button>
         <button role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false">History</button>
         <button role="tab" id="tab-health"  aria-controls="panel-health"  aria-selected="false">Health</button>
       </div>
 
       <!-- Pattern -->
       <div class="tabpanel active" id="panel-pattern" role="tabpanel" aria-labelledby="tab-pattern">
+        <div class="card">
+          <h2>What do you need?</h2>
+          <p class="note">Not sure which to pick? Start here.</p>
+          <div class="intent-grid" id="intentGrid"></div>
+          <p class="tiny intent-chosen" id="intentChosen" role="status" aria-live="polite"></p>
+        </div>
+
         <div class="pattern-list" id="patternList"></div>
 
         <div class="card">
@@ -128,7 +135,7 @@
           <h2>Soundscape</h2>
           <p class="note">Generated in your browser. No audio files, no network requests.</p>
           <div class="row" id="soundRow" style="margin-top:12px"></div>
-          <p class="tiny" id="soundStatus" style="margin-top:8px">Tap one to hear it.</p>
+          <p class="tiny" id="soundStatus" role="status" aria-live="polite" style="margin-top:8px">Tap one to hear it.</p>
           <div class="slider-row">
             <span class="label">Volume</span>
             <input type="range" id="volume" min="0" max="1" step="0.05" aria-label="Volume">
@@ -157,7 +164,36 @@
           <div class="row" style="margin-top:12px">
             <button class="secondary small" id="testVoiceBtn">Test voice</button>
           </div>
-          <p class="tiny" id="voiceStatus" style="margin-top:8px"></p>
+          <p class="tiny" id="voiceStatus" role="status" aria-live="polite" style="margin-top:8px"></p>
+        </div>
+
+        <div class="card settings-group">
+          <h2>Display</h2>
+          <p class="note">Night mode dims the whole app and softens the ending — useful when you are breathing to fall asleep.</p>
+          <div class="seg" id="nightSeg" role="group" aria-label="Night mode">
+            <button type="button" data-night="off">Off</button>
+            <button type="button" data-night="auto">Auto</button>
+            <button type="button" data-night="on">On</button>
+          </div>
+          <p class="tiny" style="margin-top:8px">Auto dims between 8pm and 6am.</p>
+        </div>
+
+        <div class="card settings-group">
+          <h2>Accessibility</h2>
+          <p class="note">Text size</p>
+          <div class="seg" id="textSizeSeg" role="group" aria-label="Text size">
+            <button type="button" data-size="normal">Normal</button>
+            <button type="button" data-size="large">Large</button>
+            <button type="button" data-size="larger">Larger</button>
+          </div>
+          <label class="toggle" style="margin-top:14px">
+            <span class="toggle-text"><strong>Higher contrast</strong><span>Solid panels and stronger text</span></span>
+            <input type="checkbox" id="contrastToggle"><span class="switch"></span>
+          </label>
+          <p class="tiny" style="margin-top:10px">
+            Sessions can be followed by ear alone: turn on the chime or spoken guidance and
+            the screen is optional.
+          </p>
         </div>
 
         <p class="tiny">
@@ -211,8 +247,23 @@
           <div class="row" style="margin-top:12px">
             <button class="green small" id="exportCsvBtn">Export CSV</button>
             <button class="secondary small" id="exportJsonBtn">Export JSON</button>
+            <button class="secondary small" id="importBtn">Import</button>
             <button class="danger small" id="clearLogBtn">Clear</button>
           </div>
+          <input type="file" id="importFile" accept="application/json,.json" class="sr-only" tabindex="-1" aria-hidden="true" aria-label="Choose a backup file to import">
+          <p class="tiny" id="importStatus" role="status" aria-live="polite" style="margin-top:8px"></p>
+        </div>
+
+        <div class="card">
+          <h2>Share your week</h2>
+          <p class="note">
+            Makes a picture of the last seven days on this device. Nothing is uploaded —
+            it only goes anywhere if you send it.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button class="green small" id="shareBtn">Share summary</button>
+          </div>
+          <p class="tiny" id="shareStatus" role="status" aria-live="polite" style="margin-top:8px"></p>
         </div>
 
         <p class="tiny">

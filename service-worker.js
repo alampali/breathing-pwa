@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calm-breathing-v5';
+const CACHE_NAME = 'calm-breathing-v6';
 
 // How long to wait for the network before falling back to the cache. Long
 // enough to ride out a slow connection, short enough that a dead one does not
@@ -19,6 +19,9 @@ const FILES_TO_CACHE = [
   './js/insights.js',
   './js/charts.js',
   './js/celebrate.js',
+  './js/intents.js',
+  './js/display.js',
+  './js/sharecard.js',
   './icon-192.png',
   './icon-512.png',
   './apple-touch-icon.png',

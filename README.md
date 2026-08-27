@@ -55,6 +55,9 @@ js/health.js          Apple Health bridge
 js/insights.js        derived views: breath count, pace series, heatmap
 js/charts.js          small SVG charts, built with DOM calls
 js/celebrate.js       the completion bloom (canvas)
+js/intents.js         "what do you need?" — felt states mapped to patterns
+js/display.js         night mode, text size, contrast
+js/sharecard.js       the weekly summary image
 js/app.js             wires the above to the DOM
 ```
 
@@ -181,6 +184,40 @@ off-screen. Under `prefers-reduced-motion` it fades a single halo and drops the 
 The canvas is inert to input and removes itself, with a timeout fallback because
 animation frames stop firing in a hidden tab.
 
+### Starting from a feeling, not a pattern
+
+A newcomer's first question is not "4-7-8 or box breathing?" — it is closer to *I feel
+bad, help*. The Pattern tab opens with four intents (can't sleep, wound up, need to
+focus, just settle me), each of which picks an existing pattern and length.
+
+Nothing new happens underneath. The point is only the doorway, and it names the pattern
+it chose afterwards, so the mapping teaches itself over a few uses.
+
+### Display and accessibility
+
+Night mode, text size and contrast are applied as attributes on `<html>`, so the whole
+cascade responds in CSS rather than JavaScript restyling elements.
+
+Night mode matters more than it sounds: 4-7-8 for ten minutes is explicitly a
+before-sleep pattern, so the app is routinely open in a dark room at bedtime, where a
+bright screen — and especially the completion bloom — works directly against what the
+session just did. It dims the palette, and `celebrate.js` reads the same attribute to
+drop the bloom to about a third of its brightness with fewer rings and motes. `auto`
+runs from 8pm to 6am and is re-checked on a timer, so an evening session does not stay
+bright simply because the app was opened at seven.
+
+Text size scales the root font, and every size in the stylesheet is in `rem` so one
+change moves the whole app. Contrast trades the glass look for solid panels and
+full-strength text. Status messages sit in `aria-live` regions, and a session can be
+followed by ear alone with the chime or spoken guidance on.
+
+### Sharing a week
+
+`sharecard.js` draws a summary of the last seven days to a canvas and hands it to the
+system share sheet as a PNG, falling back to a download where the sheet cannot take
+files. No server, no account, nothing uploaded — the data leaves only if the person
+deliberately sends the picture, which is the same promise as the CSV export.
+
 ### Storage
 
 One key, `cb.sessions.v2`, holds an array of session records:
@@ -204,6 +241,13 @@ One key, `cb.sessions.v2`, holds an array of session records:
 
 Logs written by the earlier single-file version (`breathingSessionLogs`) are imported
 once on first load and the old key is removed.
+
+**Import** is the counterpart to Export JSON. Without it an export was a one-way trip: a
+new phone, or moving from Safari to the installed app, started from zero with no way
+back. Merging is additive and never destructive — existing sessions are untouched and
+anything already present is skipped, matched on `id` and falling back to `start`, so
+importing the same file twice is harmless. Malformed records are counted and skipped
+rather than taking the history down with them.
 
 Sessions shorter than 20 seconds are not logged. Stopping partway through *is* logged,
 flagged `completed: false` — partial practice still counts.
@@ -273,7 +317,9 @@ need — a fake clock plus `requestAnimationFrame` for the engine, a fake `local
 for the store — and then exercise the real code.
 
 ```bash
-node tests/engine.test.mjs && node tests/storage.test.mjs && node tests/insights.test.mjs
+node tests/engine.test.mjs && node tests/storage.test.mjs \
+  && node tests/insights.test.mjs && node tests/import.test.mjs \
+  && node tests/display.test.mjs
 ```
 
 The engine tests check phase order and timing for every pattern, that the circle's
