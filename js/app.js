@@ -9,6 +9,9 @@ import * as insights from './insights.js';
 import { paceChart, heatmapGrid } from './charts.js';
 import { celebrate } from './celebrate.js';
 import { createEngine } from './engine.js';
+import { INTENTS, prefsFor } from './intents.js';
+import { applyDisplay, watchNight } from './display.js';
+import { summarise, shareCard } from './sharecard.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,6 +93,32 @@ function releaseWakeLock() {
 
 function allPatterns() {
   return [...PATTERNS, customPattern];
+}
+
+function renderIntents() {
+  const grid = $('intentGrid');
+  grid.innerHTML = '';
+  INTENTS.forEach((intent) => {
+    const button = document.createElement('button');
+    button.className = 'intent';
+    button.type = 'button';
+    button.innerHTML = '<span class="intent-icon" aria-hidden="true"></span><span class="intent-label"></span>';
+    button.querySelector('.intent-icon').textContent = intent.icon;
+    button.querySelector('.intent-label').textContent = intent.label;
+    button.onclick = () => {
+      prefs = store.setPrefs(prefsFor(intent));
+      pattern = findPattern(prefs.patternId, customPattern);
+      el.customCard.hidden = pattern.id !== CUSTOM_ID;
+      hydrateControls();
+      renderPatterns();
+      describePattern();
+      resetView();
+      // Naming the pattern it chose is what turns this into a way of learning
+      // them, rather than a black box that picks for you.
+      $('intentChosen').textContent = `${intent.because} (${pattern.name})`;
+    };
+    grid.appendChild(button);
+  });
 }
 
 function renderPatterns() {
@@ -544,6 +573,31 @@ $('testVoiceBtn').onclick = () => {
   }, 1200);
 };
 
+// Display and accessibility segmented controls
+function renderSegments() {
+  document.querySelectorAll('#nightSeg button').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.night === prefs.night));
+    button.onclick = () => {
+      prefs = store.setPrefs({ night: button.dataset.night });
+      applyDisplay(prefs);
+      renderSegments();
+    };
+  });
+  document.querySelectorAll('#textSizeSeg button').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.size === prefs.textSize));
+    button.onclick = () => {
+      prefs = store.setPrefs({ textSize: button.dataset.size });
+      applyDisplay(prefs);
+      renderSegments();
+    };
+  });
+}
+
+$('contrastToggle').onchange = (event) => {
+  prefs = store.setPrefs({ contrast: event.target.checked });
+  applyDisplay(prefs);
+};
+
 // Tabs
 document.querySelectorAll('[role="tab"]').forEach((tab) => {
   tab.onclick = () => {
@@ -564,6 +618,54 @@ $('exportCsvBtn').onclick = () => {
 $('exportJsonBtn').onclick = () => {
   if (store.getSessions().length === 0) return toast('Nothing to export yet.');
   store.download('breathing-sessions.json', store.toJson(), 'application/json');
+};
+
+// Import — the counterpart to export, so a backup can actually come back.
+$('importBtn').onclick = () => $('importFile').click();
+
+$('importFile').onchange = async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = '';                 // allow re-picking the same file
+  if (!file) return;
+
+  const status = $('importStatus');
+  status.textContent = 'Reading…';
+  try {
+    const result = store.importSessions(await file.text());
+    if (result.error) {
+      status.textContent = result.error;
+      return;
+    }
+    renderHistory();
+    const parts = [`Added ${result.added} session${result.added === 1 ? '' : 's'}`];
+    if (result.skipped) parts.push(`${result.skipped} already here`);
+    if (result.invalid) parts.push(`${result.invalid} unreadable`);
+    status.textContent = `${parts.join(' · ')}.`;
+    toast(result.added > 0 ? 'History imported.' : 'Nothing new to import.');
+  } catch {
+    status.textContent = 'Could not read that file.';
+  }
+};
+
+// Share — renders a card on the device and hands it to the share sheet.
+$('shareBtn').onclick = async () => {
+  const sessions = store.getSessions();
+  const status = $('shareStatus');
+  if (sessions.length === 0) return toast('Practise first — there is nothing to share yet.');
+
+  status.textContent = 'Making your card…';
+  const summary = summarise(sessions, 7);
+  if (summary.sessions === 0) {
+    status.textContent = 'No sessions in the last seven days.';
+    return;
+  }
+  const outcome = await shareCard(summary);
+  status.textContent = {
+    shared: 'Shared.',
+    downloaded: 'Saved as an image.',
+    cancelled: '',
+    failed: 'Could not make the image on this device.',
+  }[outcome] ?? '';
 };
 
 $('clearLogBtn').onclick = () => {
@@ -629,6 +731,7 @@ function hydrateControls() {
   $('voiceToggle').checked = prefs.voice;
   $('hapticsToggle').checked = prefs.haptics;
   $('wakeToggle').checked = prefs.keepAwake;
+  $('contrastToggle').checked = Boolean(prefs.contrast);
   el.customCard.hidden = pattern.id !== CUSTOM_ID;
 
   // iOS Safari has no Vibration API at all, so the switch can never do anything
@@ -660,7 +763,14 @@ audio.setSpeechBlockedHandler(() => {
     + 'speech has to be unlocked by a tap before timed cues are allowed.');
 });
 
+applyDisplay(prefs);
+// An evening session should not stay bright past 8pm just because the app was
+// opened at seven.
+watchNight(() => prefs, () => renderSegments());
+
 hydrateControls();
+renderSegments();
+renderIntents();
 renderPatterns();
 describePattern();
 renderSoundscapes();

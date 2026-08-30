@@ -26,6 +26,15 @@ function prefersReducedMotion() {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
+/**
+ * Night mode keeps the shape of the ending but takes the glare out of it. A
+ * white flash and ninety bright motes at 11pm undoes the session that just
+ * talked someone down towards sleep.
+ */
+function nightActive() {
+  return document.documentElement.hasAttribute('data-night');
+}
+
 function makeCanvas() {
   const canvas = document.createElement('canvas');
   canvas.className = 'celebrate-layer';
@@ -81,8 +90,11 @@ export function celebrate(anchor) {
 
   // A single slow halo, no drifting particles, when motion is unwelcome.
   const reduced = prefersReducedMotion();
-  const motes = reduced ? [] : makeMotes(originX, originY, baseRadius * 0.72);
-  const rings = reduced ? 1 : RING_COUNT;
+  const night = nightActive();
+  const dim = night ? 0.34 : 1;                      // scales every brightness
+  const moteCount = reduced ? 0 : (night ? Math.round(MOTE_COUNT * 0.45) : MOTE_COUNT);
+  const motes = makeMotes(originX, originY, baseRadius * 0.72).slice(0, moteCount);
+  const rings = reduced ? 1 : (night ? 3 : RING_COUNT);
 
   const started = performance.now();
   let frame = null;
@@ -111,7 +123,7 @@ export function celebrate(anchor) {
       const swell = flashT < 0.18 ? flashT / 0.18 : 1 - (flashT - 0.18) / 0.82;
       const radius = baseRadius * (1.1 + easeOut(flashT) * 1.9);
       const glow = ctx.createRadialGradient(originX, originY, 0, originX, originY, radius);
-      const peak = Math.max(0, swell) * (reduced ? 0.28 : 0.66);
+      const peak = Math.max(0, swell) * (reduced ? 0.28 : 0.66) * dim;
       glow.addColorStop(0, `rgba(226, 250, 255, ${peak.toFixed(3)})`);
       glow.addColorStop(0.45, `rgba(158, 232, 255, ${(peak * 0.42).toFixed(3)})`);
       glow.addColorStop(1, 'rgba(158, 232, 255, 0)');
@@ -125,7 +137,7 @@ export function celebrate(anchor) {
       const t = (elapsed - i * RING_STAGGER) / RING_LIFE;
       if (t <= 0 || t >= 1) continue;
       const radius = baseRadius * (0.8 + easeOut(t) * 3.6);
-      const alpha = (1 - t) * (reduced ? 0.3 : 0.75);
+      const alpha = (1 - t) * (reduced ? 0.3 : 0.75) * dim;
       const [r, g, b] = TINTS[i % TINTS.length];
       ctx.beginPath();
       ctx.arc(originX, originY, radius, 0, Math.PI * 2);
@@ -141,7 +153,7 @@ export function celebrate(anchor) {
       const t = (elapsed - mote.delay) / mote.life;
       if (t <= 0 || t >= 1) return;
       // Fade in over the first fifth, then out across the rest.
-      const alpha = (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8);
+      const alpha = (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8) * dim;
       const x = mote.x + Math.sin(mote.phase + t * Math.PI * 2) * mote.sway;
       const y = mote.y - easeOut(t) * mote.rise;
       const [r, g, b] = mote.tint;
