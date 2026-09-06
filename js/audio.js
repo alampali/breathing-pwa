@@ -177,6 +177,10 @@ const BED_LEVEL = { ocean: 0.34, rain: 0.3, bowl: 0.28 };
 // chosen soundscape — previewing builds a bed without changing the choice.
 let activeBedId = 'none';
 
+// Bumped by anything that legitimately takes over the bed, so a pending
+// preview cleanup knows it has been superseded and must not fire.
+let previewToken = 0;
+
 function buildBed(id) {
   teardownBed();
   activeBedId = id;
@@ -285,6 +289,7 @@ export function setVolume(value) {
 
 export function setSoundscape(id) {
   current = id;
+  previewToken += 1;         // supersede any preview waiting to clean up
   if (!ctx) return;          // takes effect the next time audio starts
   wake();
   buildBed(id);
@@ -293,12 +298,15 @@ export function setSoundscape(id) {
 /** Must be called from a user gesture the first time. */
 export function start(id = current) {
   current = id;
+  previewToken += 1;         // a real session outranks any pending preview
   if (!wake()) return;
   buildBed(current);
 }
 
 export function stop() {
+  previewToken += 1;         // do not let a preview resurrect the bed later
   teardownBed();
+  activeBedId = 'none';
 }
 
 export function suspend() {
@@ -470,11 +478,20 @@ export function completion() {
 export function preview(id, seconds = 3.5) {
   if (id === 'none' || !wake()) return;
   const previous = current;
+  const token = ++previewToken;
   buildBed(id);
-  const previewing = bed;
+
   setTimeout(() => {
-    // Leave it alone if a real session has since taken over the bed.
-    if (bed === previewing) buildBed(previous === id ? id : 'none');
+    // A counter, not the identity of the bed node.
+    //
+    // This previously compared the live bed against the one the preview built,
+    // and left it alone if they differed. But a *missing* track file makes the
+    // error handler swap in the fallback bed, which changes that identity — so
+    // the check failed, the cleanup never ran, and the fallback played on
+    // forever. Anything that legitimately takes over (a session starting, a
+    // different soundscape, an explicit stop) bumps the counter instead.
+    if (token !== previewToken) return;
+    buildBed(previous === id ? id : 'none');
   }, seconds * 1000);
 }
 
