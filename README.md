@@ -111,6 +111,53 @@ even at full volume with a soundscape playing underneath.
 Tapping a soundscape outside a session auditions it for a few seconds. That doubles as
 the user gesture iOS needs before it will allow any audio at all.
 
+### Background tracks
+
+Soundscapes are either synthesised or a looping audio file. File-backed entries in
+`SOUNDSCAPES` carry a `src`, a `gain` and a `fallback`.
+
+**No audio is committed.** `audio/` ships with a README and a `.gitignore`; the flute
+track is added locally. The Pixabay licence permits using the music in an app but not
+redistributing it as standalone files, and an MP3 in a public repository is arguably
+exactly that. It also keeps the repository small and the deploy quick.
+
+That makes a missing file the ordinary first-run state rather than a fault, so
+selecting Flute without one falls back to a generated bed and the Settings tab explains
+why, instead of a soundscape that silently plays nothing.
+
+Tracks are played through a `MediaElementAudioSourceNode` rather than decoded into an
+`AudioBuffer`: a ten-minute track decodes to well over 100MB of PCM, which is not
+something to hold on a phone. Routing through the graph also means the volume slider and
+the output limiter apply to music exactly as they do to everything else.
+
+Recorded music is much hotter than the generated beds, hence the per-track `gain` — 0.5
+for the flute. Adjust that rather than the volume slider, which moves everything at once.
+
+The service worker treats audio as **cache-first and never precaches it**. Precaching
+would make the very first load pay for several megabytes of music before the app
+appears, and revalidating would re-download it on every launch. A changed track means a
+changed filename. Ranged media requests return `206 Partial Content`, which is
+explicitly not cached — a partial response served as the whole file is silent corruption.
+
+### Choosing a voice
+
+The Settings tab lists the device's speech voices, best first. `rankVoices` scores them
+on language, then on quality tier — Apple's "Enhanced" and "Premium" variants are
+markedly warmer than the compact voices installed by default — then on a list of
+reliably pleasant names.
+
+macOS also ships joke voices ("Bad News", "Bahh", "Zarvox"). Those were ranking directly
+beneath the good one in the picker, so they are pushed to the bottom, though never
+removed.
+
+The single biggest improvement available to how the guidance sounds is not in this code:
+on iOS, downloading an Enhanced or Premium voice under Settings → Accessibility → Spoken
+Content → Voices. The app says so on Apple devices.
+
+Guidance is spoken slower and slightly lower than conversational, and the soundscape
+**ducks** underneath it. Without ducking the voice and the music sit at the same level
+and both turn to mush.
+
 ### Vibration
 
 iOS Safari does not implement the Vibration API — `navigator.vibrate` is simply absent,
@@ -319,7 +366,7 @@ for the store — and then exercise the real code.
 ```bash
 node tests/engine.test.mjs && node tests/storage.test.mjs \
   && node tests/insights.test.mjs && node tests/import.test.mjs \
-  && node tests/display.test.mjs
+  && node tests/display.test.mjs && node tests/voice.test.mjs
 ```
 
 The engine tests check phase order and timing for every pattern, that the circle's

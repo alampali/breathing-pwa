@@ -1,4 +1,4 @@
-const CACHE_NAME = 'calm-breathing-v6';
+const CACHE_NAME = 'calm-breathing-v7';
 
 // How long to wait for the network before falling back to the cache. Long
 // enough to ride out a slow connection, short enough that a dead one does not
@@ -57,6 +57,31 @@ function fetchWithTimeout(request) {
 
 // Network-first: a deploy is live on the very next launch rather than the one
 // after. The cache is the offline safety net, not the default source.
+/**
+ * Audio tracks are cache-first and never precached.
+ *
+ * They are large and optional — precaching would make the very first load pay
+ * for several megabytes of music before the app appears, and revalidating on
+ * every launch would re-download it. Once fetched it never needs checking
+ * again: a changed track means a changed filename.
+ */
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    // 206 Partial Content comes back for ranged media requests and must not be
+    // cached — a partial response would be served as if it were the whole file.
+    if (response && response.status === 200 && response.type === 'basic') {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return Response.error();
+  }
+}
+
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
 
@@ -84,7 +109,13 @@ async function networkFirst(request) {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  if (new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/audio/') || /\.(mp3|m4a|ogg|wav)$/i.test(url.pathname)) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
 
   event.respondWith(networkFirst(request));
 });

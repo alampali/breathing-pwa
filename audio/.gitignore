@@ -1,0 +1,9 @@
+# Audio tracks are added locally, never committed.
+#
+# The Pixabay licence permits using this music in the app but not redistributing
+# it as standalone files, and an MP3 in a public repository is arguably exactly
+# that. Keeping them out also keeps the repository small and the deploy fast.
+*.mp3
+*.m4a
+*.ogg
+*.wav
