@@ -82,7 +82,11 @@ const voice = (name, lang, { localService = true, def = false } = {}) => ({
 {
   const flute = audio.findSoundscape('flute');
   assert.ok(flute, 'the flute soundscape exists');
-  assert.equal(flute.src, './audio/flute.mp3');
+
+  // Asserted as a shape rather than one filename: the extension changes when the
+  // track is re-encoded, but it must keep living under ./audio/ with a type the
+  // service worker recognises, or it silently stops being cached.
+  assert.match(flute.src, /^\.\/audio\/[\w-]+\.(mp3|m4a|ogg|wav)$/, flute.src);
   assert.ok(flute.fallback, 'it names a generated fallback for when the file is absent');
   assert.ok(audio.findSoundscape(flute.fallback), 'and that fallback is a real soundscape');
   assert.ok(flute.gain > 0 && flute.gain <= 1, 'with a sane gain');

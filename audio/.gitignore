@@ -1,9 +1,11 @@
-# Audio tracks are added locally, never committed.
+# Source audio stays local; only the encoded track the app ships is committed.
 #
-# The Pixabay licence permits using this music in the app but not redistributing
-# it as standalone files, and an MP3 in a public repository is arguably exactly
-# that. Keeping them out also keeps the repository small and the deploy fast.
+# The 11MB 256kbps MP3 from Pixabay is the master copy. What gets deployed is a
+# 128kbps AAC re-encode at roughly half the size — see README.md in this folder.
 *.mp3
-*.m4a
-*.ogg
 *.wav
+*.ogg
+*.m4a
+
+# ...except the track the app actually plays, which has to reach the deploy.
+!flute.m4a

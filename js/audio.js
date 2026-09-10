@@ -28,7 +28,7 @@ let volume = 0.5;
  * what happens in a fresh clone: no audio is committed to the repository.
  */
 export const SOUNDSCAPES = [
-  { id: 'flute', label: 'Flute', src: './audio/flute.mp3', gain: 0.5, fallback: 'bowl' },
+  { id: 'flute', label: 'Flute', src: './audio/flute.m4a', gain: 0.5, fallback: 'bowl' },
   { id: 'ocean', label: 'Ocean' },
   { id: 'rain',  label: 'Rain' },
   { id: 'bowl',  label: 'Singing Bowl' },

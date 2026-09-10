@@ -116,14 +116,18 @@ the user gesture iOS needs before it will allow any audio at all.
 Soundscapes are either synthesised or a looping audio file. File-backed entries in
 `SOUNDSCAPES` carry a `src`, a `gain` and a `fallback`.
 
-**No audio is committed.** `audio/` ships with a README and a `.gitignore`; the flute
-track is added locally. The Pixabay licence permits using the music in an app but not
-redistributing it as standalone files, and an MP3 in a public repository is arguably
-exactly that. It also keeps the repository small and the deploy quick.
+`audio/flute.m4a` **is committed**, because it has to deploy for anyone other than the
+person who downloaded it to hear it. Source files stay local — `audio/.gitignore` keeps
+`.mp3`/`.wav` out and re-includes that one track.
 
-That makes a missing file the ordinary first-run state rather than a fault, so
-selecting Flute without one falls back to a generated bed and the Settings tab explains
-why, instead of a soundscape that silently plays nothing.
+It ships as 128kbps AAC rather than the 256kbps MP3 Pixabay serves: 5.8MB against 11MB
+for the same music, measured at 33.8 dB SNR against the original. AAC is a
+generationally better codec than MP3, so this is removing waste rather than quality. See
+[audio/README.md](audio/README.md) for the numbers and the re-encode command.
+
+A missing file is still handled as an ordinary state rather than a fault — a fresh clone
+before adding a track, say. Selecting Flute without one falls back to a generated bed and
+the Settings tab explains why, instead of a soundscape that silently plays nothing.
 
 Tracks are played through a `MediaElementAudioSourceNode` rather than decoded into an
 `AudioBuffer`: a ten-minute track decodes to well over 100MB of PCM, which is not
