@@ -36,6 +36,11 @@ build step: the repository root is uploaded as-is. Adding a file means adding it
 `FILES_TO_CACHE` in `service-worker.js` and bumping `CACHE_NAME`, otherwise offline
 launches will miss it.
 
+`staticwebapp.config.json` exists only to set MIME types. Azure serves `.m4a` as
+`application/octet-stream` by default; Chrome sniffs the container and plays it anyway,
+but Safari is stricter about media types and this is an iPhone-first app, so it is
+declared explicitly rather than left to sniffing.
+
 The service worker is **network-first**: it asks the network first (revalidating rather
 than trusting the browser's HTTP cache) and falls back to the cache only when the
 network fails or takes longer than 2.5 seconds. A deploy is therefore live on the very

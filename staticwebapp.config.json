@@ -1,0 +1,8 @@
+{
+  "mimeTypes": {
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json"
+  }
+}
