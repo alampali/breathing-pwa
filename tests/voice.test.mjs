@@ -91,12 +91,31 @@ const voice = (name, lang, { localService = true, def = false } = {}) => ({
   assert.ok(audio.findSoundscape(flute.fallback), 'and that fallback is a real soundscape');
   assert.ok(flute.gain > 0 && flute.gain <= 1, 'with a sane gain');
 
-  // Every generated soundscape must stay file-free, or offline breaks.
-  ['ocean', 'rain', 'bowl'].forEach((id) => {
+  // The invariant that matters: every fallback must name a bed the synthesiser
+  // can actually build. A fallback pointing at another file-backed soundscape
+  // would retry the missing file and recurse until the stack gave out — which
+  // is live the moment a track shares its name with a generated bed, as Rain
+  // now does.
+  audio.SOUNDSCAPES.filter((s) => s.src).forEach((s) => {
+    assert.ok(s.fallback, `${s.id} must name a fallback`);
+    assert.ok(audio.GENERATED_BEDS.includes(s.fallback),
+      `${s.id} falls back to "${s.fallback}", which is not a generated bed`);
+    assert.match(s.src, /^\.\/audio\/[\w-]+\.(mp3|m4a|ogg|wav)$/, s.src);
+    assert.ok(s.gain > 0 && s.gain <= 1, `${s.id} needs a sane gain`);
+  });
+
+  // Rain is the interesting case: file-backed, falling back to its own name.
+  const rain = audio.findSoundscape('rain');
+  assert.equal(rain.src, './audio/rain.m4a');
+  assert.equal(rain.fallback, 'rain', 'falls back to the synthesised rain');
+
+  // Ocean and the bowl stay purely synthesised, so something always works
+  // offline even with no audio files at all.
+  ['ocean', 'bowl'].forEach((id) => {
     assert.ok(!audio.findSoundscape(id).src, `${id} stays synthesised`);
   });
   assert.equal(audio.findSoundscape('nope'), null);
-  console.log('✓ the flute is file-backed with a generated fallback; the rest stay synthesised');
+  console.log('✓ every file-backed soundscape falls back to a bed that can be synthesised');
 }
 
 /* 6. Novelty voices sink to the bottom ------------------------------------ */

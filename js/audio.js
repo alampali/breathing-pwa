@@ -30,10 +30,19 @@ let volume = 0.5;
 export const SOUNDSCAPES = [
   { id: 'flute', label: 'Flute', src: './audio/flute.m4a', gain: 0.5, fallback: 'bowl' },
   { id: 'ocean', label: 'Ocean' },
-  { id: 'rain',  label: 'Rain' },
+  // Recorded rain, falling back to the synthesised rain of the same name when
+  // the file is unavailable — see buildBed on why that cannot recurse.
+  { id: 'rain',  label: 'Rain', src: './audio/rain.m4a', gain: 0.45, fallback: 'rain' },
   { id: 'bowl',  label: 'Singing Bowl' },
   { id: 'none',  label: 'Silent' },
 ];
+
+/**
+ * The beds `buildGenerated` knows how to synthesise. Every `fallback` must name
+ * one of these: a fallback pointing at a file-backed soundscape would retry the
+ * missing file and recurse. Exported so the tests can hold that line.
+ */
+export const GENERATED_BEDS = ['ocean', 'rain', 'bowl'];
 
 export function findSoundscape(id) {
   return SOUNDSCAPES.find((sound) => sound.id === id) || null;
@@ -181,21 +190,46 @@ let activeBedId = 'none';
 // preview cleanup knows it has been superseded and must not fire.
 let previewToken = 0;
 
+// Whether the live bed is the file or the synthesised stand-in. They can share
+// a name (Rain), so the id alone cannot answer it.
+let bedIsTrack = false;
+
+/**
+ * Builds the soundscape named by `id` — from its file if it has one, otherwise
+ * synthesised.
+ *
+ * `fallback` deliberately names a *generated* bed and is only ever reached
+ * through `buildGenerated`, which does not look at `src`. That matters now that
+ * a soundscape can be file-backed under the same name as a generated one: Rain
+ * falls back to the synthesised rain, and routing that through `buildBed` would
+ * retry the missing file and recurse until the stack gave out.
+ */
 function buildBed(id) {
+  const sound = findSoundscape(id);
+  if (sound?.src) return buildTrack(sound);
+  return buildGenerated(id);
+}
+
+/** Tears down whatever is playing and returns a fresh, silent bus. */
+function openBus(id) {
   teardownBed();
   activeBedId = id;
-  if (id === 'none' || !ctx) return;
-
-  const nodes = [];
+  if (id === 'none' || !ctx) return null;
   const bus = ctx.createGain();
   bus.gain.value = 0;
   bus.connect(master);
-  nodes.push(bus);
   bedBus = bus;
+  return bus;
+}
 
-  const sound = findSoundscape(id);
+function buildTrack(sound) {
+  const id = sound.id;
+  const bus = openBus(id);
+  if (!bus) return;
+  bedIsTrack = true;
+  const nodes = [bus];
 
-  if (sound?.src) {
+  {
     const { element, source } = getTrack(sound.src);
     source.connect(bus);
     nodes.push(element, source);
@@ -210,7 +244,7 @@ function buildBed(id) {
       // testing `current` here skipped the fallback for every preview.
       if (activeBedId !== id) return;
       onTrackMissing?.(sound);
-      buildBed(sound.fallback || 'bowl');
+      buildGenerated(sound.fallback || 'bowl');
     };
 
     const played = element.play();
@@ -221,8 +255,15 @@ function buildBed(id) {
     bus.gain.setValueAtTime(0, ctx.currentTime);
     bus.gain.linearRampToValueAtTime(sound.gain ?? 0.5, ctx.currentTime + 2.2);
     bed = nodes;
-    return;
   }
+}
+
+/** The synthesised beds. Never consults `src`, so it cannot recurse. */
+function buildGenerated(id) {
+  const bus = openBus(id);
+  bedIsTrack = false;
+  if (!bus) return;
+  const nodes = [bus];
 
   if (id === 'ocean' || id === 'rain') {
     const source = ctx.createBufferSource();
@@ -339,7 +380,7 @@ function duckBed(depth = 0.35, holdSeconds = 1.6) {
 /** Whether audio is currently able to make a sound, for the Sound tab's check. */
 export function audioState() {
   const sound = findSoundscape(activeBedId);
-  const entry = sound?.src ? trackNodes.get(sound.src) : null;
+  const entry = bedIsTrack && sound?.src ? trackNodes.get(sound.src) : null;
   return {
     supported: Boolean(window.AudioContext || window.webkitAudioContext),
     created: Boolean(ctx),
