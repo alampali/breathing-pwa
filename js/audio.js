@@ -15,15 +15,63 @@
 let ctx = null;
 let master = null;
 let bed = null;          // nodes belonging to the current soundscape
+let bedBus = null;       // its gain node, so speech can duck under it
 let current = 'none';
 let volume = 0.5;
 
+/**
+ * A soundscape is either synthesised here, or a looping audio file.
+ *
+ * File-backed entries carry `src` and a `gain` — recorded music is far hotter
+ * than the generated beds, so it needs pulling down to sit at the same level.
+ * `fallback` names the generated bed to use if the file is missing, which is
+ * what happens in a fresh clone: no audio is committed to the repository.
+ */
 export const SOUNDSCAPES = [
+  { id: 'flute', label: 'Flute', src: './audio/flute.m4a', gain: 0.5, fallback: 'bowl' },
   { id: 'ocean', label: 'Ocean' },
-  { id: 'rain',  label: 'Rain' },
+  // Recorded rain, falling back to the synthesised rain of the same name when
+  // the file is unavailable — see buildBed on why that cannot recurse.
+  { id: 'rain',  label: 'Rain', src: './audio/rain.m4a', gain: 0.45, fallback: 'rain' },
   { id: 'bowl',  label: 'Singing Bowl' },
   { id: 'none',  label: 'Silent' },
 ];
+
+/**
+ * The beds `buildGenerated` knows how to synthesise. Every `fallback` must name
+ * one of these: a fallback pointing at a file-backed soundscape would retry the
+ * missing file and recurse. Exported so the tests can hold that line.
+ */
+export const GENERATED_BEDS = ['ocean', 'rain', 'bowl'];
+
+export function findSoundscape(id) {
+  return SOUNDSCAPES.find((sound) => sound.id === id) || null;
+}
+
+/** Track elements are cached: a MediaElementSource may only be made once each. */
+const trackNodes = new Map();
+let onTrackMissing = null;
+
+export function setTrackMissingHandler(handler) {
+  onTrackMissing = handler;
+}
+
+function getTrack(src) {
+  if (trackNodes.has(src)) return trackNodes.get(src);
+
+  const element = new Audio();
+  element.src = src;
+  element.loop = true;
+  element.preload = 'auto';
+  element.crossOrigin = 'anonymous';
+  element.playsInline = true;
+  // Routed through the graph rather than played directly, so the volume slider
+  // and the output limiter apply to it exactly as they do to everything else.
+  const source = ctx.createMediaElementSource(element);
+  const entry = { element, source };
+  trackNodes.set(src, entry);
+  return entry;
+}
 
 /**
  * Ask iOS to treat this as media playback so the ringer switch stops muting it.
@@ -111,10 +159,22 @@ function getNoiseBuffer(colour = 'brown') {
 function teardownBed() {
   if (!bed) return;
   bed.forEach((node) => {
+    // A track's element is paused rather than stopped, and its source node is
+    // left connected — it belongs to the cache and gets reused.
+    if (node instanceof HTMLAudioElement) {
+      try { node.pause(); node.currentTime = 0; } catch { /* not ready yet */ }
+      return;
+    }
+    if (node instanceof MediaElementAudioSourceNode) {
+      // Disconnect but keep it: it can be reconnected, never recreated.
+      try { node.disconnect(); } catch { /* already detached */ }
+      return;
+    }
     try { node.stop?.(); } catch { /* already stopped */ }
     try { node.disconnect?.(); } catch { /* already detached */ }
   });
   bed = null;
+  bedBus = null;
 }
 
 // Levels and cutoffs are pitched for a phone speaker, which rolls off steeply
@@ -122,15 +182,88 @@ function teardownBed() {
 // was close to inaudible on an iPhone while sounding fine on headphones.
 const BED_LEVEL = { ocean: 0.34, rain: 0.3, bowl: 0.28 };
 
-function buildBed(id) {
-  teardownBed();
-  if (id === 'none' || !ctx) return;
+// Which bed is meant to be playing. Distinct from `current`, which is the
+// chosen soundscape — previewing builds a bed without changing the choice.
+let activeBedId = 'none';
 
-  const nodes = [];
+// Bumped by anything that legitimately takes over the bed, so a pending
+// preview cleanup knows it has been superseded and must not fire.
+let previewToken = 0;
+
+// Whether the live bed is the file or the synthesised stand-in. They can share
+// a name (Rain), so the id alone cannot answer it.
+let bedIsTrack = false;
+
+/**
+ * Builds the soundscape named by `id` — from its file if it has one, otherwise
+ * synthesised.
+ *
+ * `fallback` deliberately names a *generated* bed and is only ever reached
+ * through `buildGenerated`, which does not look at `src`. That matters now that
+ * a soundscape can be file-backed under the same name as a generated one: Rain
+ * falls back to the synthesised rain, and routing that through `buildBed` would
+ * retry the missing file and recurse until the stack gave out.
+ */
+function buildBed(id) {
+  const sound = findSoundscape(id);
+  if (sound?.src) return buildTrack(sound);
+  return buildGenerated(id);
+}
+
+/** Tears down whatever is playing and returns a fresh, silent bus. */
+function openBus(id) {
+  teardownBed();
+  activeBedId = id;
+  if (id === 'none' || !ctx) return null;
   const bus = ctx.createGain();
   bus.gain.value = 0;
   bus.connect(master);
-  nodes.push(bus);
+  bedBus = bus;
+  return bus;
+}
+
+function buildTrack(sound) {
+  const id = sound.id;
+  const bus = openBus(id);
+  if (!bus) return;
+  bedIsTrack = true;
+  const nodes = [bus];
+
+  {
+    const { element, source } = getTrack(sound.src);
+    source.connect(bus);
+    nodes.push(element, source);
+
+    element.onerror = () => {
+      // No audio ships with the repository, so a missing file is the normal
+      // first-run state rather than an error. Drop to the generated bed and let
+      // the UI explain, instead of leaving a soundscape that plays nothing.
+      //
+      // Compared against the bed actually being built, not the chosen
+      // soundscape: previewing builds a bed without changing the choice, so
+      // testing `current` here skipped the fallback for every preview.
+      if (activeBedId !== id) return;
+      onTrackMissing?.(sound);
+      buildGenerated(sound.fallback || 'bowl');
+    };
+
+    const played = element.play();
+    played?.catch(() => {
+      // Autoplay refusal: the next user gesture will start it.
+    });
+
+    bus.gain.setValueAtTime(0, ctx.currentTime);
+    bus.gain.linearRampToValueAtTime(sound.gain ?? 0.5, ctx.currentTime + 2.2);
+    bed = nodes;
+  }
+}
+
+/** The synthesised beds. Never consults `src`, so it cannot recurse. */
+function buildGenerated(id) {
+  const bus = openBus(id);
+  bedIsTrack = false;
+  if (!bus) return;
+  const nodes = [bus];
 
   if (id === 'ocean' || id === 'rain') {
     const source = ctx.createBufferSource();
@@ -197,6 +330,7 @@ export function setVolume(value) {
 
 export function setSoundscape(id) {
   current = id;
+  previewToken += 1;         // supersede any preview waiting to clean up
   if (!ctx) return;          // takes effect the next time audio starts
   wake();
   buildBed(id);
@@ -205,12 +339,15 @@ export function setSoundscape(id) {
 /** Must be called from a user gesture the first time. */
 export function start(id = current) {
   current = id;
+  previewToken += 1;         // a real session outranks any pending preview
   if (!wake()) return;
   buildBed(current);
 }
 
 export function stop() {
+  previewToken += 1;         // do not let a preview resurrect the bed later
   teardownBed();
+  activeBedId = 'none';
 }
 
 export function suspend() {
@@ -221,8 +358,29 @@ export function resume() {
   if (ctx && ctx.state !== 'running') ctx.resume?.().catch(() => {});
 }
 
+/**
+ * Dips the soundscape while something is spoken, then lets it back up.
+ *
+ * Without this the guidance competes with the music at the same level and both
+ * turn to mush; ducking is what makes a spoken cue sound placed rather than
+ * layered on top.
+ */
+function duckBed(depth = 0.35, holdSeconds = 1.6) {
+  if (!ctx || !bedBus) return;
+  const sound = findSoundscape(current);
+  const full = sound?.src ? (sound.gain ?? 0.5) : (BED_LEVEL[current] ?? 0.3);
+  const now = ctx.currentTime;
+  bedBus.gain.cancelScheduledValues(now);
+  bedBus.gain.setValueAtTime(bedBus.gain.value, now);
+  bedBus.gain.linearRampToValueAtTime(full * depth, now + 0.25);
+  bedBus.gain.setValueAtTime(full * depth, now + holdSeconds);
+  bedBus.gain.linearRampToValueAtTime(full, now + holdSeconds + 0.9);
+}
+
 /** Whether audio is currently able to make a sound, for the Sound tab's check. */
 export function audioState() {
+  const sound = findSoundscape(activeBedId);
+  const entry = bedIsTrack && sound?.src ? trackNodes.get(sound.src) : null;
   return {
     supported: Boolean(window.AudioContext || window.webkitAudioContext),
     created: Boolean(ctx),
@@ -230,6 +388,18 @@ export function audioState() {
     sessionType: (() => {
       try { return navigator.audioSession?.type ?? null; } catch { return null; }
     })(),
+    bed: activeBedId,
+    bedGain: bedBus ? Math.round(bedBus.gain.value * 1000) / 1000 : null,
+    // Present only while a file-backed soundscape is loaded, so a silent track
+    // can be told apart from a silent output.
+    track: entry ? {
+      src: entry.element.src,
+      paused: entry.element.paused,
+      currentTime: entry.element.currentTime,
+      duration: entry.element.duration,
+      readyState: entry.element.readyState,
+      error: entry.element.error?.code ?? null,
+    } : null,
   };
 }
 
@@ -349,11 +519,20 @@ export function completion() {
 export function preview(id, seconds = 3.5) {
   if (id === 'none' || !wake()) return;
   const previous = current;
+  const token = ++previewToken;
   buildBed(id);
-  const previewing = bed;
+
   setTimeout(() => {
-    // Leave it alone if a real session has since taken over the bed.
-    if (bed === previewing) buildBed(previous === id ? id : 'none');
+    // A counter, not the identity of the bed node.
+    //
+    // This previously compared the live bed against the one the preview built,
+    // and left it alone if they differed. But a *missing* track file makes the
+    // error handler swap in the fallback bed, which changes that identity — so
+    // the check failed, the cleanup never ran, and the fallback played on
+    // forever. Anything that legitimately takes over (a session starting, a
+    // different soundscape, an explicit stop) bumps the counter instead.
+    if (token !== previewToken) return;
+    buildBed(previous === id ? id : 'none');
   }, seconds * 1000);
 }
 
@@ -378,19 +557,86 @@ const synth = () => window.speechSynthesis;
 
 export const speechSupported = () => 'speechSynthesis' in window;
 
+// Apple ships several tiers of voice under similar names. The "Enhanced" and
+// "Premium" variants are markedly warmer than the compact ones that come
+// installed, and are the single biggest factor in whether guidance sounds human
+// — but they only exist once the user has downloaded them in iOS Settings.
+const QUALITY_HINTS = [/premium/i, /enhanced/i, /neural/i, /natural/i, /siri/i];
+
+// Reliably warm-sounding English voices, best first, when nothing else decides.
+const PREFERRED_NAMES = [
+  'ava', 'samantha', 'serena', 'allison', 'susan', 'karen',
+  'moira', 'fiona', 'tessa', 'daniel', 'oliver',
+];
+
+// macOS ships a set of joke and effect voices — "Bad News", "Bahh", "Zarvox" —
+// which are useless for guidance and were landing directly beneath the good one
+// in the picker. They are pushed to the bottom rather than hidden, since they
+// remain perfectly selectable if someone actually wants them.
+const NOVELTY_NAMES = new Set([
+  'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos',
+  'deranged', 'good news', 'hysterical', 'jester', 'junior', 'organ',
+  'pipe organ', 'princess', 'ralph', 'superstar', 'trinoids', 'whisper',
+  'wobble', 'zarvox', 'fred', 'kathy', 'bruce', 'agnes',
+]);
+
+/**
+ * Scores voices so the most natural-sounding one wins by default.
+ * Exported for testing — ranking is easy to get subtly wrong and hard to hear.
+ */
+export function rankVoices(voices, lang = 'en-US') {
+  const base = (lang || 'en').slice(0, 2).toLowerCase();
+  return [...voices]
+    .map((voice, index) => {
+      const name = (voice.name || '').toLowerCase();
+      const voiceLang = (voice.lang || '').toLowerCase();
+      let score = 0;
+      if (voiceLang === lang.toLowerCase()) score += 40;
+      else if (voiceLang.startsWith(base)) score += 25;
+      else score -= 60;                       // wrong language is disqualifying
+
+      if (QUALITY_HINTS.some((re) => re.test(name))) score += 30;
+      if (NOVELTY_NAMES.has(name.replace(/\s*\(.*$/, '').trim())) score -= 50;
+      const preferred = PREFERRED_NAMES.indexOf(name.split(/[\s(]/)[0]);
+      if (preferred >= 0) score += 18 - preferred;
+      if (voice.localService) score += 4;     // offline, and usually lower latency
+      if (voice.default) score += 2;
+      return { voice, score, index };
+    })
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.voice);
+}
+
+/** Voices worth offering: the UI language first, and never a silent list. */
+export function listVoices(lang = navigator.language || 'en-US') {
+  if (!speechSupported()) return [];
+  const all = synth().getVoices();
+  const base = lang.slice(0, 2).toLowerCase();
+  const matching = all.filter((v) => (v.lang || '').toLowerCase().startsWith(base));
+  return rankVoices(matching.length ? matching : all, lang);
+}
+
+export function setVoiceURI(uri) {
+  preferredVoiceURI = uri || null;
+  chosenVoice = pickVoice();
+  return chosenVoice;
+}
+
+export function currentVoice() {
+  return chosenVoice;
+}
+
+let preferredVoiceURI = null;
+
 function pickVoice() {
   if (!speechSupported()) return null;
   const voices = synth().getVoices();
   if (!voices.length) return null;               // not loaded yet
-  const lang = navigator.language || 'en-US';
-  const base = lang.slice(0, 2);
-  return voices.find((v) => v.lang === lang && v.localService)
-    || voices.find((v) => v.lang === lang)
-    || voices.find((v) => v.lang?.startsWith(base) && v.localService)
-    || voices.find((v) => v.lang?.startsWith(base))
-    || voices.find((v) => v.default)
-    || voices[0]
-    || null;
+  if (preferredVoiceURI) {
+    const saved = voices.find((v) => v.voiceURI === preferredVoiceURI);
+    if (saved) return saved;
+  }
+  return listVoices()[0] || voices[0] || null;
 }
 
 if (speechSupported()) {
@@ -428,11 +674,16 @@ export function speak(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   if (chosenVoice) utterance.voice = chosenVoice;
   utterance.lang = chosenVoice?.lang || navigator.language || 'en-US';
-  utterance.rate = 0.9;
-  utterance.pitch = 0.95;
+  // Slower and slightly lower than conversational. Guidance is meant to be
+  // followed, not listened to, and an unhurried delivery is most of what makes
+  // a synthetic voice sound soothing rather than brisk.
+  utterance.rate = 0.78;
+  utterance.pitch = 0.92;
   // The slider governs ambience; guidance needs to stay audible above it,
   // unless the slider is all the way down and silence is clearly the intent.
   utterance.volume = volume <= 0.02 ? 0 : Math.max(0.6, volume);
+
+  duckBed();
 
   let started = false;
   utterance.onstart = () => { started = true; speechPrimed = true; };

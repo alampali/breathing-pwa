@@ -161,7 +161,12 @@
             <span class="toggle-text"><strong>Keep screen awake</strong><span>Stops the display sleeping mid-session</span></span>
             <input type="checkbox" id="wakeToggle"><span class="switch"></span>
           </label>
-          <div class="row" style="margin-top:12px">
+          <div class="field" style="margin-top:14px">
+            <span>Voice</span>
+            <select id="voiceSelect" aria-label="Guidance voice"></select>
+          </div>
+          <p class="tiny" id="voiceHint" style="margin-top:8px"></p>
+          <div class="row" style="margin-top:10px">
             <button class="secondary small" id="testVoiceBtn">Test voice</button>
           </div>
           <p class="tiny" id="voiceStatus" role="status" aria-live="polite" style="margin-top:8px"></p>

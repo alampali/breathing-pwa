@@ -130,6 +130,7 @@ export const DEFAULT_PREFS = {
   volume: 0.5,
   chime: true,
   voice: false,
+  voiceURI: null,     // which speech voice, when there is a choice
   haptics: true,
   keepAwake: true,
   night: 'auto',       // 'off' | 'on' | 'auto' (auto dims after 8pm)

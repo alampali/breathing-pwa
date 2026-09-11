@@ -36,6 +36,11 @@ build step: the repository root is uploaded as-is. Adding a file means adding it
 `FILES_TO_CACHE` in `service-worker.js` and bumping `CACHE_NAME`, otherwise offline
 launches will miss it.
 
+`staticwebapp.config.json` exists only to set MIME types. Azure serves `.m4a` as
+`application/octet-stream` by default; Chrome sniffs the container and plays it anyway,
+but Safari is stricter about media types and this is an iPhone-first app, so it is
+declared explicitly rather than left to sniffing.
+
 The service worker is **network-first**: it asks the network first (revalidating rather
 than trusting the browser's HTTP cache) and falls back to the cache only when the
 network fails or takes longer than 2.5 seconds. A deploy is therefore live on the very
@@ -110,6 +115,57 @@ even at full volume with a soundscape playing underneath.
 
 Tapping a soundscape outside a session auditions it for a few seconds. That doubles as
 the user gesture iOS needs before it will allow any audio at all.
+
+### Background tracks
+
+Soundscapes are either synthesised or a looping audio file. File-backed entries in
+`SOUNDSCAPES` carry a `src`, a `gain` and a `fallback`.
+
+`audio/flute.m4a` **is committed**, because it has to deploy for anyone other than the
+person who downloaded it to hear it. Source files stay local — `audio/.gitignore` keeps
+`.mp3`/`.wav` out and re-includes that one track.
+
+It ships as 128kbps AAC rather than the 256kbps MP3 Pixabay serves: 5.8MB against 11MB
+for the same music, measured at 33.8 dB SNR against the original. AAC is a
+generationally better codec than MP3, so this is removing waste rather than quality. See
+[audio/README.md](audio/README.md) for the numbers and the re-encode command.
+
+A missing file is still handled as an ordinary state rather than a fault — a fresh clone
+before adding a track, say. Selecting Flute without one falls back to a generated bed and
+the Settings tab explains why, instead of a soundscape that silently plays nothing.
+
+Tracks are played through a `MediaElementAudioSourceNode` rather than decoded into an
+`AudioBuffer`: a ten-minute track decodes to well over 100MB of PCM, which is not
+something to hold on a phone. Routing through the graph also means the volume slider and
+the output limiter apply to music exactly as they do to everything else.
+
+Recorded music is much hotter than the generated beds, hence the per-track `gain` — 0.5
+for the flute. Adjust that rather than the volume slider, which moves everything at once.
+
+The service worker treats audio as **cache-first and never precaches it**. Precaching
+would make the very first load pay for several megabytes of music before the app
+appears, and revalidating would re-download it on every launch. A changed track means a
+changed filename. Ranged media requests return `206 Partial Content`, which is
+explicitly not cached — a partial response served as the whole file is silent corruption.
+
+### Choosing a voice
+
+The Settings tab lists the device's speech voices, best first. `rankVoices` scores them
+on language, then on quality tier — Apple's "Enhanced" and "Premium" variants are
+markedly warmer than the compact voices installed by default — then on a list of
+reliably pleasant names.
+
+macOS also ships joke voices ("Bad News", "Bahh", "Zarvox"). Those were ranking directly
+beneath the good one in the picker, so they are pushed to the bottom, though never
+removed.
+
+The single biggest improvement available to how the guidance sounds is not in this code:
+on iOS, downloading an Enhanced or Premium voice under Settings → Accessibility → Spoken
+Content → Voices. The app says so on Apple devices.
+
+Guidance is spoken slower and slightly lower than conversational, and the soundscape
+**ducks** underneath it. Without ducking the voice and the music sit at the same level
+and both turn to mush.
 
 ### Vibration
 
@@ -319,7 +375,7 @@ for the store — and then exercise the real code.
 ```bash
 node tests/engine.test.mjs && node tests/storage.test.mjs \
   && node tests/insights.test.mjs && node tests/import.test.mjs \
-  && node tests/display.test.mjs
+  && node tests/display.test.mjs && node tests/voice.test.mjs
 ```
 
 The engine tests check phase order and timing for every pattern, that the circle's

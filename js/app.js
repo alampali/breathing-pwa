@@ -161,6 +161,40 @@ function selectPattern(id) {
 
 /* -------------------------------------------------------------- sound UI */
 
+function renderVoices() {
+  const select = $('voiceSelect');
+  const hint = $('voiceHint');
+  const voices = audio.listVoices();
+
+  select.innerHTML = '';
+  if (voices.length === 0) {
+    const option = document.createElement('option');
+    option.textContent = 'No voices available';
+    select.appendChild(option);
+    select.disabled = true;
+    hint.textContent = 'This browser offers no speech voices.';
+    return;
+  }
+
+  select.disabled = false;
+  voices.forEach((voice) => {
+    const option = document.createElement('option');
+    option.value = voice.voiceURI;
+    option.textContent = `${voice.name}${voice.localService ? '' : ' (online)'}`;
+    select.appendChild(option);
+  });
+
+  const active = audio.currentVoice();
+  if (active) select.value = active.voiceURI;
+
+  // The compact voices iOS installs by default are the flat, robotic ones. The
+  // warmer Enhanced/Premium variants have to be downloaded first, and that is
+  // the single biggest improvement available to how the guidance sounds.
+  hint.textContent = health.isAppleDevice()
+    ? 'For a warmer voice, install an Enhanced or Premium one in iOS Settings → Accessibility → Spoken Content → Voices, then reopen this app.'
+    : 'Voices come from your device, so the list differs between browsers.';
+}
+
 function renderSoundscapes() {
   el.soundRow.innerHTML = '';
   audio.SOUNDSCAPES.forEach((sound) => {
@@ -554,6 +588,14 @@ CUSTOM_FIELDS.forEach(([id, kind]) => {
   };
 });
 
+$('voiceSelect').onchange = (event) => {
+  prefs = store.setPrefs({ voiceURI: event.target.value });
+  audio.setVoiceURI(event.target.value);
+  audio.primeSpeech();                 // this change is still a user gesture
+  audio.speak('Breathe in');
+  setVoiceStatus('');
+};
+
 $('testVoiceBtn').onclick = () => {
   if (!audio.speechSupported()) {
     setVoiceStatus('This browser has no speech engine, so spoken guidance will not work here.');
@@ -758,6 +800,15 @@ function hydrateControls() {
   });
 }
 
+audio.setVoiceURI(prefs.voiceURI);
+
+// No audio ships with the repository, so a missing track is the ordinary
+// first-run state rather than a fault. Say what happened and what to do.
+audio.setTrackMissingHandler((sound) => {
+  setSoundStatus(`${sound.label} needs an audio file at ${sound.src} — `
+    + 'see audio/README.md. Using the generated sound for now.');
+});
+
 audio.setSpeechBlockedHandler(() => {
   setVoiceStatus('iOS blocked that cue. Tap "Test voice" once, then start the session — '
     + 'speech has to be unlocked by a tap before timed cues are allowed.');
@@ -774,6 +825,12 @@ renderIntents();
 renderPatterns();
 describePattern();
 renderSoundscapes();
+renderVoices();
+// The voice list is empty on first read in most browsers and fills in later.
+window.speechSynthesis?.addEventListener?.('voiceschanged', () => {
+  audio.setVoiceURI(prefs.voiceURI);
+  renderVoices();
+});
 renderHistory();
 audio.setSoundscape(prefs.soundscape);
 resetView();
